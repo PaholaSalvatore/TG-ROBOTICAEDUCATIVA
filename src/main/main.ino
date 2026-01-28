@@ -1,3 +1,9 @@
+#include <LedControl.h>
+
+//matrices led
+LedControl face = LedControl(51, 52, 53, 2);
+
+
 // Botones y encoder
 const int movementButton = 22;      //boton para seleccionar los movimientos
 const int lightButton = 24;         //Boton para seleccionar las luces
@@ -18,6 +24,171 @@ struct step{
 };
 
 step currentStep;
+
+/*-------------- ANIMACIONES ------------------*/
+//Apagar matrices
+void turnDownLed() {
+  for (int d = 0; d < 2; d++) {
+    for (int r = 0; r < 8; r++) {
+      for (int c = 0; c < 8; c++) {
+        face.setLed(d, r, c, false);
+      }
+    }
+  }
+}
+
+//Cara de mareado
+void dizzyEyes(int d) {
+  for (int i = 0; i < 8; i++) {
+    face.setLed(d, i, i, true);
+    face.setLed(d, i, 7 - i, true);
+  }
+}
+
+//Ojo abierto
+void openedEye(int d) {
+  int puntos[][2] = {
+    {0,2},{0,3},{0,4},{0,5},
+    {1,1},{1,2},{1,3},{1,4},{1,5},{1,6},
+    {2,1},{2,2},{2,3},{2,6},
+    {3,1},{3,2},{3,3},{3,6},
+    {4,1},{4,2},{4,3},{4,4},{4,5},{4,6},
+    {5,1},{5,2},{5,3},{5,4},{5,5},{5,6},
+    {6,1},{6,2},{6,3},{6,4},{6,5},{6,6},
+    {7,2},{7,3},{7,4},{7,5}
+  };
+  
+  for (auto &p : puntos) face.setLed(d, p[0], p[1], true);
+}
+
+//Ojo cerrado (guino)
+void blinkedEye(int d) {
+  int puntos[][2] = {
+    {3,1},{3,6},
+    {4,1},{4,6},
+    {5,2},{5,3},{5,4},{5,5}
+  };
+  
+  for (auto &p : puntos) face.setLed(d, p[0], p[1], true);
+}
+
+//Ojos de enamorado (corazones)
+void heartEyes(int d) {
+  int puntos[][2] = {
+    {0,1},{0,2},{0,5},{0,6},
+    {1,0},{1,1},{1,2},{1,3},{1,4},{1,5},{1,6},{1,7},
+    {2,0},{2,1},{2,2},{2,3},{2,4},{2,5},{2,6},{2,7},
+    {3,0},{3,1},{3,2},{3,3},{3,4},{3,5},{3,6},{3,7},
+    {4,1},{4,2},{4,3},{4,4},{4,5},{4,6},
+    {5,2},{5,3},{5,4},{5,5},
+    {6,3},{6,4}
+  };
+  
+  for (auto &p : puntos) face.setLed(d, p[0], p[1], true);
+}
+
+//Ojitos tristes
+void leftSadEye(int d) {
+  int puntos[][2] = {
+    {1,0},{1,7},
+    {2,0},{2,7},
+    {3,1},{3,6},
+    {4,2},{4,3},{4,4},{4,5},
+    {6,0},{6,1},
+    {7,0},{7,1}
+  };
+  
+  for (auto &p : puntos) face.setLed(d, p[0], p[1], true);
+}
+
+void rightSadEye(int d) {
+  int puntos[][2] = {
+    {1,0},{1,7},
+    {2,0},{2,7},
+    {3,1},{3,6},
+    {4,2},{4,3},{4,4},{4,5},
+    {6,6},{6,7},
+    {7,6},{7,7}
+  };
+  
+  for (auto &p : puntos) face.setLed(d, p[0], p[1], true);
+}
+
+//Ojitos enojados
+void angryEyes(int d) {
+  int puntos[][2] = {
+    {0,1},{0,6},
+    {1,2},{1,5},
+    {2,3},{2,4},
+    {4,2},{4,3},{4,4},{4,5},
+    {5,2},{5,3},{5,5},
+    {6,2},{6,3},{6,4},{6,5},
+    {7,2},{7,3},{7,4},{7,5},
+  };
+  
+  for (auto &p : puntos) face.setLed(d, p[0], p[1], true);
+}
+
+//Sonrisa
+void leftSmile(int d) {
+  int puntos[][2] = {
+    {2,0},{2,1},{2,2},{2,3},{2,4},{2,5},{2,6},{2,7},
+    {3,0},{3,1},{3,2},{3,3},{3,4},{3,5},{3,6},{3,7},
+    {4,0},{4,1},{4,2},{4,3},{4,4},{4,5},{4,6},{4,7},
+    {5,1},{5,2},{5,3},{5,4},{5,5},{5,6},{5,7},
+    {6,2},{6,3},{6,4},{6,5},{6,6},{6,7},
+    {7,3},{7,4},{7,5},{7,6},{7,7}
+  };
+  
+  for (auto &p : puntos) face.setLed(d, p[0], p[1], true);
+}
+
+void rightSmile(int d) {
+  int puntos[][2] = {
+    {2,0},{2,1},{2,2},{2,3},{2,4},{2,5},{2,6},{2,7},
+    {3,0},{3,1},{3,2},{3,3},{3,4},{3,5},{3,6},{3,7},
+    {4,0},{4,1},{4,2},{4,3},{4,4},{4,5},{4,6},{4,7},
+    {5,0},{5,1},{5,2},{5,3},{5,4},{5,5},{5,6},
+    {6,0},{6,1},{6,2},{6,3},{6,4},{6,5},{6,6},
+    {7,0},{7,1},{7,2},{7,3},{7,4}
+  };
+  
+  for (auto &p : puntos) face.setLed(d, p[0], p[1], true);
+}
+
+//Linea
+void seriousMouth(int d) {
+  for (int d = 0; d < 2; d++) {
+    for (int r = 3; r < 5; r++) {
+      for (int c = 0; c < 8; c++) {
+        face.setLed(d, r, c, true);
+      }
+    }
+  }
+}
+
+//Sonrisa triste
+void leftSadMouth(int d) {
+  int puntos[][2] = {
+    {2,4},{2,5},{2,6},{2,7},
+    {3,3},
+    {4,2},
+    {5,2}
+  };
+  
+  for (auto &p : puntos) face.setLed(d, p[0], p[1], true);
+}
+
+void rightSadMouth(int d) {
+  int puntos[][2] = {
+    {2,0},{2,1},{2,2},{2,3},
+    {3,4},
+    {4,5},
+    {5,5}
+  };
+  
+  for (auto &p : puntos) face.setLed(d, p[0], p[1], true);
+}
 
 // Ejecuciones
 
@@ -82,21 +253,40 @@ void executeMelody(int option){
 }
 
 void executeAnimation(int option){
+  turnDownLed();
+
   switch (option) {
     case 0:
-      Serial.println("Sin opciones seleccionadas");
       break;
 
     case 1:
-      Serial.println("Feliz");
+      dizzyEyes(1);
+      dizzyEyes(0);
       break;
 
     case 2:
-      Serial.println("Triste");
+      openedEye(0);
+      blinkedEye(1);
       break;
 
     case 3:
-      Serial.println("Molesto");
+      heartEyes(0);
+      heartEyes(1);
+      break;
+
+    case 4:
+      leftSadEye(1);
+      rightSadEye(0);
+      break;
+
+    case 5:
+      openedEye(0);
+      openedEye(1);
+      break;
+
+    case 6:
+      angryEyes(0);
+      angryEyes(1);
       break;
   }
 }
@@ -117,6 +307,13 @@ void setup() {
   pinMode(melodyButton, INPUT_PULLUP);
   pinMode(animationButton, INPUT_PULLUP);
   pinMode(startButton, INPUT_PULLUP);
+
+  //set matrices
+  for (int d = 0; d < 2; d++) {
+    face.shutdown(d, false);
+    face.setIntensity(d, 5);
+    face.clearDisplay(d);
+  }
 
   Serial.begin(9600);  
 }
@@ -185,7 +382,7 @@ void loop() {
       
       animationCounter++;
       
-      if (animationCounter > 3) animationCounter = 0;
+      if (animationCounter > 6) animationCounter = 0;
       
       currentStep.animation = animationCounter;
       
@@ -201,10 +398,10 @@ void loop() {
     if (digitalRead(startButton) == LOW) {
       Serial.println("START");
       executeStep(currentStep);
+
       while (digitalRead(startButton) == LOW);   
       delay(40);
+    }
    }
-  }
-
 
 }
