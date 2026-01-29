@@ -1,8 +1,13 @@
 #include <LedControl.h>
+#define STEP_DURATION 1500  // tiempo de cada paso en milisegundos
+#define MAX_STEPS 8         //Cantidad de pasos maxima permitida
+
+unsigned long lastPressTime = 0;
+const unsigned long doubleClickDelay = 400; // ms
+bool waitingSecondPress = false;
 
 //matrices led
 LedControl face = LedControl(51, 52, 53, 2);
-
 
 // Botones y encoder
 const int movementButton = 22;      //boton para seleccionar los movimientos
@@ -11,11 +16,15 @@ const int melodyButton = 26;        //Boton para seleccionar las melodia
 const int animationButton = 28;     //Boton para seleccionar las animacion de ojos y boca
 const int startButton = 30;         //Boton para iniciar ejecucion de pasos
 
+//Variables de estados relacionadas a los botones de accion
 int movementCounter = 0;
 int lightCounter = 0;
 int melodyCounter = 0; 
 int animationCounter = 0;
 
+/* -------- Estrucutra logica de concurrencia --------*/
+
+// Modelo de datos para los pasos
 struct step{
   uint8_t movement;
   uint8_t light;
@@ -23,9 +32,12 @@ struct step{
   uint8_t animation;
 };
 
-step currentStep;
+step currentStep;   //paso actual
+step secuency[MAX_STEPS];     // Arreglo para la Secuencia de pasos
+int maxConfiguredSteps = 4;   // Configuracion del selector de pasos 4, 6 u 8 
+int stepCount = 0;            // Cuántos pasos ya se han guardado (programado por el usuario)
 
-/*-------------- ANIMACIONES ------------------*/
+/*-------------- ANIMACIONES -------------*/
 //Apagar matrices
 void turnDownLed() {
   for (int d = 0; d < 2; d++) {
@@ -190,6 +202,59 @@ void rightSadMouth(int d) {
   for (auto &p : puntos) face.setLed(d, p[0], p[1], true);
 }
 
+/* ------ MEMORIA -------*/
+void saveCurrentStep() {
+  if (stepCount < maxConfiguredSteps) {
+    secuency[stepCount] = currentStep;
+    Serial.print("Paso guardado en posicion: ");
+    Serial.println(stepCount);
+
+    stepCount++;
+
+    // Reiniciar el paso actual para el siguiente
+    currentStep.movement = 0;
+    currentStep.light = 0;
+    currentStep.melody = 0;
+    currentStep.animation = 0;
+
+    // Reiniciar los contadores
+    movementCounter = 0;
+    lightCounter = 0;
+    melodyCounter = 0;
+    animationCounter = 0;
+    
+    // Si ya se alcanzó el número configurado de pasos,
+    // mostramos toda la secuencia
+    if (stepCount == maxConfiguredSteps) {
+      printSequence();
+    }
+  } else {
+    Serial.println("Secuencia completa");
+  }
+}
+
+void printSequence() {
+  Serial.println("=== Contenido de la secuencia ===");
+
+  for (int i = 0; i < stepCount; i++) {
+    Serial.print("Paso ");
+    Serial.print(i);
+    Serial.print(" -> ");
+
+    Serial.print("M:");
+    Serial.print(secuency[i].movement);
+    Serial.print(" | L:");
+    Serial.print(secuency[i].light);
+    Serial.print(" | Me:");
+    Serial.print(secuency[i].melody);
+    Serial.print(" | A:");
+    Serial.println(secuency[i].animation);
+  }
+
+  Serial.println("===============================");
+}
+
+
 // Ejecuciones
 
 void executeMovement(int option){
@@ -260,31 +325,37 @@ void executeAnimation(int option){
       break;
 
     case 1:
+      Serial.println("Expresion Dizzy");
       dizzyEyes(1);
       dizzyEyes(0);
       break;
 
     case 2:
+      Serial.println("Guiño de ojo");
       openedEye(0);
       blinkedEye(1);
       break;
 
     case 3:
+      Serial.println("Expresion enamorado");
       heartEyes(0);
       heartEyes(1);
       break;
 
     case 4:
+      Serial.println("Expresion triste");
       leftSadEye(1);
       rightSadEye(0);
       break;
 
     case 5:
+      Serial.println("Expresion Feliz");
       openedEye(0);
       openedEye(1);
       break;
 
     case 6:
+      Serial.println("Expresion molesta");
       angryEyes(0);
       angryEyes(1);
       break;
@@ -299,6 +370,51 @@ void executeStep(step s){
   executeMelody(s.melody);
   executeAnimation(s.animation);
 }
+
+void executeSequence() {
+  Serial.println("=== Ejecutando secuencia ===");
+
+  for (int i = 0; i < stepCount; i++) {
+    Serial.print("Paso ");
+    Serial.println(i);
+
+    executeStep(secuency[i]);   // Acciones concurrentes
+    delay(STEP_DURATION);       // Mantener el paso activo
+  }
+
+  Serial.println("=== Fin de la secuencia ===");
+
+  // Volver al estado inicial del sistema
+  resetProgram();
+}
+
+void resetProgram() {
+  stepCount = 0;
+
+  currentStep.movement = 0;
+  currentStep.light = 0;
+  currentStep.melody = 0;
+  currentStep.animation = 0;
+
+  movementCounter = 0;
+  lightCounter = 0;
+  melodyCounter = 0;
+  animationCounter = 0;
+
+  waitingSecondPress = false;
+
+  resetHardwareState();
+
+  Serial.println("Sistema reiniciado. Listo para nueva secuencia.");
+}
+
+void resetHardwareState() {
+  executeMovement(0);   // detener motores
+  executeLight(0);      // apagar luces
+  executeMelody(0);     // detener sonido
+  executeAnimation(0);  // mostrar expresión neutra o apagar matriz
+}
+
 
 void setup() {
   //set botones
@@ -318,8 +434,11 @@ void setup() {
   Serial.begin(9600);  
 }
 
+
+
 void loop() {
   // -------- BOTÓN MOVEMENT --------
+  
   if (digitalRead(movementButton) == LOW) {
     
     delay(40);
@@ -390,18 +509,40 @@ void loop() {
       delay(40);
     }
   }
-
+  
   if (digitalRead(startButton) == LOW) {
-  
-    delay(40);
-  
+    delay(30);
     if (digitalRead(startButton) == LOW) {
-      Serial.println("START");
-      executeStep(currentStep);
 
-      while (digitalRead(startButton) == LOW);   
-      delay(40);
+      unsigned long now = millis();
+
+      if (!waitingSecondPress) {
+        // Primer pulso detectado
+        waitingSecondPress = true;
+        lastPressTime = now;
+      } else {
+        // Segundo pulso dentro del tiempo permitido → ejecutar secuencia
+        if (now - lastPressTime <= doubleClickDelay) {
+          Serial.println("DOBLE PULSO -> Ejecutar secuencia");
+          executeSequence();
+
+          // Reiniciar para nueva programación
+          stepCount = 0;
+          waitingSecondPress = false;
+        }
+      }
+
+      while (digitalRead(startButton) == LOW);
+      delay(30);
     }
-   }
+  }
+
+  // Si pasó el tiempo y no hubo segundo pulso → es pulso simple
+  if (waitingSecondPress && (millis() - lastPressTime > doubleClickDelay)) {
+    Serial.println("PULSO SIMPLE -> Guardar paso");
+    saveCurrentStep();
+    waitingSecondPress = false;
+  }
+
 
 }
