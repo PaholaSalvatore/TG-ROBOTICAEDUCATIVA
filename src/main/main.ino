@@ -1,10 +1,10 @@
 #include <LedControl.h>
-#define STEP_DURATION 1500  // tiempo de cada paso en milisegundos
+#define STEP_DURATION 5000  // tiempo de cada paso en milisegundos
 #define MAX_STEPS 8         //Cantidad de pasos maxima permitida
-
-unsigned long lastPressTime = 0;
-const unsigned long doubleClickDelay = 400; // ms
-bool waitingSecondPress = false;
+#define MOVEMENTS 3
+#define LIGHTS 3
+#define MELODIES 3
+#define ANIMATIONS 6
 
 //matrices led
 LedControl face = LedControl(51, 52, 53, 2);
@@ -15,12 +15,30 @@ const int lightButton = 24;         //Boton para seleccionar las luces
 const int melodyButton = 26;        //Boton para seleccionar las melodia
 const int animationButton = 28;     //Boton para seleccionar las animacion de ojos y boca
 const int startButton = 30;         //Boton para iniciar ejecucion de pasos
+const int previousStepButton = 23;      //Boton para regresar al paso anterior
+const int nextStepButton = 25;      //Boton para avanzar al siguiente paso
 
 //Variables de estados relacionadas a los botones de accion
 int movementCounter = 0;
 int lightCounter = 0;
 int melodyCounter = 0; 
 int animationCounter = 0;
+
+
+struct buttonState {
+  bool stableState;
+  bool lastRead;
+  unsigned long lastChange;
+};
+
+buttonState btnMove   = {HIGH, HIGH, 0};
+buttonState btnLight  = {HIGH, HIGH, 0};
+buttonState btnMelody = {HIGH, HIGH, 0};
+buttonState btnAnimation   = {HIGH, HIGH, 0};
+buttonState btnStart  = {HIGH, HIGH, 0};
+buttonState btnNextStep   = {HIGH, HIGH, 0};
+buttonState btnPreviousStep = {HIGH, HIGH, 0};
+
 
 /* -------- Estrucutra logica de concurrencia --------*/
 
@@ -32,10 +50,11 @@ struct step{
   uint8_t animation;
 };
 
-step currentStep;   //paso actual
+step currentStep;             //paso actual
 step secuency[MAX_STEPS];     // Arreglo para la Secuencia de pasos
-int maxConfiguredSteps = 4;   // Configuracion del selector de pasos 4, 6 u 8 
+int maxConfiguredSteps = 2;   // Configuracion del selector de pasos 4, 6 u 8 
 int stepCount = 0;            // Cuántos pasos ya se han guardado (programado por el usuario)
+int currentStepIndex = 0;
 
 /*-------------- ANIMACIONES -------------*/
 //Apagar matrices
@@ -203,34 +222,23 @@ void rightSadMouth(int d) {
 }
 
 /* ------ MEMORIA -------*/
-void saveCurrentStep() {
-  if (stepCount < maxConfiguredSteps) {
-    secuency[stepCount] = currentStep;
-    Serial.print("Paso guardado en posicion: ");
-    Serial.println(stepCount);
+void saveCurrentStepAtIndex() {
+  secuency[currentStepIndex] = currentStep;
 
+  // Si estamos creando un paso nuevo, aumentar stepCount
+  if (currentStepIndex == stepCount && stepCount < maxConfiguredSteps) {
     stepCount++;
+  } 
+}
 
-    // Reiniciar el paso actual para el siguiente
-    currentStep.movement = 0;
-    currentStep.light = 0;
-    currentStep.melody = 0;
-    currentStep.animation = 0;
+void loadStep(int index) {
+  currentStep = secuency[index];
 
-    // Reiniciar los contadores
-    movementCounter = 0;
-    lightCounter = 0;
-    melodyCounter = 0;
-    animationCounter = 0;
-    
-    // Si ya se alcanzó el número configurado de pasos,
-    // mostramos toda la secuencia
-    if (stepCount == maxConfiguredSteps) {
-      printSequence();
-    }
-  } else {
-    Serial.println("Secuencia completa");
-  }
+  // Sincronizar contadores con el paso cargado
+  movementCounter  = currentStep.movement;
+  lightCounter     = currentStep.light;
+  melodyCounter    = currentStep.melody;
+  animationCounter = currentStep.animation;
 }
 
 void printSequence() {
@@ -401,8 +409,6 @@ void resetProgram() {
   melodyCounter = 0;
   animationCounter = 0;
 
-  waitingSecondPress = false;
-
   resetHardwareState();
 
   Serial.println("Sistema reiniciado. Listo para nueva secuencia.");
@@ -415,6 +421,28 @@ void resetHardwareState() {
   executeAnimation(0);  // mostrar expresión neutra o apagar matriz
 }
 
+//Lectura de los botones
+bool pressedButton(int pin, buttonState &btn) {
+  const unsigned long debounceTime = 40;
+  bool read = digitalRead(pin);
+
+  if (read != btn.lastRead) {
+    btn.lastChange = millis();
+  }
+
+  if ((millis() - btn.lastChange) > debounceTime) {
+    if (read != btn.stableState) {
+      btn.stableState = read;
+      if (btn.stableState == LOW) {
+        btn.lastRead = read;
+        return true;
+      }
+    }
+  }
+
+  btn.lastRead = read;
+  return false;
+}
 
 void setup() {
   //set botones
@@ -423,6 +451,8 @@ void setup() {
   pinMode(melodyButton, INPUT_PULLUP);
   pinMode(animationButton, INPUT_PULLUP);
   pinMode(startButton, INPUT_PULLUP);
+  pinMode(nextStepButton, INPUT_PULLUP);
+  pinMode(previousStepButton, INPUT_PULLUP);
 
   //set matrices
   for (int d = 0; d < 2; d++) {
@@ -434,115 +464,74 @@ void setup() {
   Serial.begin(9600);  
 }
 
-
-
 void loop() {
   // -------- BOTÓN MOVEMENT --------
   
-  if (digitalRead(movementButton) == LOW) {
-    
-    delay(40);
-    
-    if (digitalRead(movementButton) == LOW) {
-      
-      movementCounter++;
-      
-      if (movementCounter > 3) movementCounter = 0;
-      
-      currentStep.movement = movementCounter;
-      
-      while (digitalRead(movementButton) == LOW);
-      delay(40);
-    }
+  if (pressedButton(movementButton, btnMove)){
+    movementCounter++;      
+    if (movementCounter > MOVEMENTS) movementCounter = 0;  
+    currentStep.movement = movementCounter;
   }
 
-  // -------- BOTÓN light --------
-  if (digitalRead(lightButton) == LOW) {
-
-    delay(40);
-
-    if (digitalRead(lightButton) == LOW) {
-      
-      lightCounter++;
-      
-      if (lightCounter > 3) lightCounter = 0;
-      
-      currentStep.light = lightCounter;
-      
-      while (digitalRead(lightButton) == LOW);
-      delay(40);
-    }
-  }
-    
-  // -------- BOTÓN melodia --------
-  if (digitalRead(melodyButton) == LOW) {
-
-    delay(40);
-
-    if (digitalRead(melodyButton) == LOW) {
-      
-      melodyCounter++;
-      
-      if (melodyCounter > 3) melodyCounter = 0;
-      
-      currentStep.melody = melodyCounter;
-      
-      while (digitalRead(melodyButton) == LOW);
-      delay(40);
-    }
+/*----------- Boton de luces -----------*/
+  if (pressedButton(lightButton, btnLight)){
+    lightCounter++; 
+    if (lightCounter > LIGHTS) lightCounter = 0;    
+    currentStep.light = lightCounter;
   }
 
-    // -------- BOTÓN animacion de ojos y boca --------
-  if (digitalRead(animationButton) == LOW) {
-
-    delay(40);
-
-    if (digitalRead(animationButton) == LOW) {
-      
-      animationCounter++;
-      
-      if (animationCounter > 6) animationCounter = 0;
-      
-      currentStep.animation = animationCounter;
-      
-      while (digitalRead(animationButton) == LOW);
-      delay(40);
-    }
+/*------------ Boton de melodias ------------*/
+  if (pressedButton(melodyButton, btnMelody)){
+    melodyCounter++;
+    if (melodyCounter > MELODIES) melodyCounter = 0;    
+    currentStep.melody = melodyCounter;
   }
-  
-  if (digitalRead(startButton) == LOW) {
-    delay(30);
-    if (digitalRead(startButton) == LOW) {
 
-      unsigned long now = millis();
+/*-------- BOTÓN animacion de ojos y boca --------*/ 
+  if (pressedButton(animationButton, btnAnimation)){
+    animationCounter++;
+    if (animationCounter > ANIMATIONS) animationCounter = 0;   
+    currentStep.animation = animationCounter;
+  }
 
-      if (!waitingSecondPress) {
-        // Primer pulso detectado
-        waitingSecondPress = true;
-        lastPressTime = now;
+  if (pressedButton(nextStepButton, btnNextStep)) {
+
+    saveCurrentStepAtIndex();
+
+    if (currentStepIndex < maxConfiguredSteps - 1) {
+      currentStepIndex++;
+
+      if (currentStepIndex < stepCount) {
+        loadStep(currentStepIndex);   // paso ya existente
       } else {
-        // Segundo pulso dentro del tiempo permitido → ejecutar secuencia
-        if (now - lastPressTime <= doubleClickDelay) {
-          Serial.println("DOBLE PULSO -> Ejecutar secuencia");
-          executeSequence();
-
-          // Reiniciar para nueva programación
-          stepCount = 0;
-          waitingSecondPress = false;
-        }
+        // paso nuevo → limpio
+        currentStep = {0, 0, 0, 0};
+        movementCounter = lightCounter = melodyCounter = animationCounter = 0;
       }
-
-      while (digitalRead(startButton) == LOW);
-      delay(30);
     }
+
+    Serial.print("PA - Paso actual: ");
+    Serial.println(currentStepIndex);
   }
 
-  // Si pasó el tiempo y no hubo segundo pulso → es pulso simple
-  if (waitingSecondPress && (millis() - lastPressTime > doubleClickDelay)) {
-    Serial.println("PULSO SIMPLE -> Guardar paso");
-    saveCurrentStep();
-    waitingSecondPress = false;
-  }
+  if (pressedButton(previousStepButton, btnPreviousStep)) {
 
+    saveCurrentStepAtIndex();
+
+    if (currentStepIndex > 0) {
+      currentStepIndex--;
+      loadStep(currentStepIndex);
+    }
+
+    Serial.print("PP - Paso actual: ");
+    Serial.println(currentStepIndex);
+}
+
+
+
+  if (pressedButton(startButton, btnStart)){
+    executeSequence();
+  }  
+  
 
 }
