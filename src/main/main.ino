@@ -444,6 +444,7 @@ void executeSequence() {
 
 void resetProgram() {
   stepCount = 0;
+  currentStepIndex = 0;
 
   currentStep.movement = 0;
   currentStep.light = 0;
