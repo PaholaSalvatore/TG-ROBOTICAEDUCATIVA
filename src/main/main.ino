@@ -1,13 +1,24 @@
 #include <LedControl.h>
+#include <RGBLED.h>
+
 #define STEP_DURATION 5000  // tiempo de cada paso en milisegundos
 #define MAX_STEPS 8         //Cantidad de pasos maxima permitida
 #define MOVEMENTS 3
-#define LIGHTS 3
+#define LIGHTS 4
 #define MELODIES 3
 #define ANIMATIONS 6
 #define MAX_ITERATIONS 4
 #define MIN_ITERATIONS 1
 #define ENCODER_STEPS_PER_CHANGE 3
+
+#define RED    255, 0, 0
+#define GREEN   0, 255, 0
+#define BLUE    0, 0, 255
+#define WHITE  255, 255, 255
+#define OFF 0, 0, 0
+
+// luces led rgb
+RGBLED led(9, 10, 11); 
 
 //matrices led
 LedControl face = LedControl(51, 52, 53, 2);
@@ -317,19 +328,28 @@ void executeMovement(int option){
 void executeLight(int option){
   switch (option) {
     case 0:
+      led.setRGB(OFF);
       Serial.println("Sin opciones seleccionadas");
       break;
 
     case 1:
-      Serial.println("Azul");
+      led.setRGB(RED);
+      Serial.println("ROJO");
       break;
 
     case 2:
-      Serial.println("Rojo");
+      led.setRGB(BLUE);
+      Serial.println("AZUL");
       break;
 
     case 3:
-      Serial.println("Amarillo");
+      led.setRGB(GREEN);
+      Serial.println("VERDE");
+      break;
+
+    case 4:
+      led.setRGB(WHITE);
+      Serial.println("BLANCO");
       break;
   }
 }
@@ -445,6 +465,7 @@ void resetHardwareState() {
   executeLight(0);      // apagar luces
   executeMelody(0);     // detener sonido
   executeAnimation(0);  // mostrar expresión neutra o apagar matriz
+  led.setRGB(OFF);
 }
 
 //Lectura de los botones
