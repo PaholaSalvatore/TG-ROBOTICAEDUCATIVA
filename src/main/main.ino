@@ -1,5 +1,6 @@
 #include <LedControl.h>
 #include <Stepper.h>
+#include <RGBLED.h>
 
 #define STEPS_PER_REV 2048    // Pasos por vuelta
 #define MOTOR_SPEED 10        // Velocidad RPM
@@ -17,6 +18,15 @@
 #define MIN_ITERATIONS 1
 #define ENCODER_STEPS_PER_CHANGE 3
 
+#define RED    255, 0, 0
+#define GREEN   0, 255, 0
+#define BLUE    0, 0, 255
+#define WHITE  255, 255, 255
+#define OFF 0, 0, 0
+
+// luces led rgb
+RGBLED led(32, 34, 36); 
+
 //matrices led
 LedControl face = LedControl(51, 52, 53, 2);
 
@@ -30,7 +40,7 @@ const int nextStepButton = 25;      //Boton para avanzar al siguiente paso
 
 const int startButton = 30;         //Boton para iniciar ejecucion de pasos
 const int encoderS1 = 31;           //PIN S1
-const int encoderS2 = 32;           //PIN S2
+const int encoderS2 = 33;           //PIN S2
 
 //Variables de control del encoder
 int iterations = MIN_ITERATIONS;
@@ -74,8 +84,18 @@ int stepCount = 0;            // Cuántos pasos ya se han guardado (programado p
 int currentStepIndex = 0;
 
 //Motores
-Stepper motorLeft(STEPS_PER_REV, 39, 43, 41, 45);
-Stepper motorRight(STEPS_PER_REV, 38, 42, 40, 44);
+#define leftIn1 39
+#define leftIn2 41
+#define leftIn3 43
+#define leftIn4 45
+
+#define rightIn1 38
+#define rightIn2 40
+#define rightIn3 42
+#define rightIn4 44
+
+Stepper motorLeft(STEPS_PER_REV, leftIn1, leftIn3, leftIn2, leftIn4);
+Stepper motorRight(STEPS_PER_REV, rightIn1, rightIn3, rightIn2, rightIn4);
 
 // --- Movimientos de alto nivel ---
 
@@ -337,6 +357,7 @@ void executeMovement(int option){
   switch (option) {
     case 0:
       Serial.println("Sin movimiento seleccionado");
+      stopMotors();
       break;
 
     case 1:
@@ -364,19 +385,28 @@ void executeMovement(int option){
 void executeLight(int option){
   switch (option) {
     case 0:
+      led.setRGB(OFF);
       Serial.println("Sin luces seleccionadas");
       break;
 
     case 1:
-      Serial.println("Azul");
+      led.setRGB(RED);
+      Serial.println("ROJO");
       break;
 
     case 2:
-      Serial.println("Rojo");
+      led.setRGB(BLUE);
+      Serial.println("AZUL");
       break;
 
     case 3:
-      Serial.println("Amarillo");
+      led.setRGB(GREEN);
+      Serial.println("VERDE");
+      break;
+
+    case 4:
+      led.setRGB(WHITE);
+      Serial.println("BLANCO");
       break;
   }
 }
@@ -471,6 +501,7 @@ void executeSequence() {
 
 void resetProgram() {
   stepCount = 0;
+  currentStepIndex = 0;
 
   currentStep.movement = 0;
   currentStep.light = 0;
@@ -488,23 +519,22 @@ void resetProgram() {
 }
 
 void resetHardwareState() {
-  executeMovement(0);   // detener motores
-  executeLight(0);      // apagar luces
+  led.setRGB(OFF);      // apagar luces led RGB
   executeMelody(0);     // detener sonido
-  executeAnimation(0);  // mostrar expresión neutra o apagar matriz
-  stopMotors();
+  stopMotors();         // detener motores
+  turnDownLed();       // apagar matrices
 }
 
 void stopMotors() {
-  digitalWrite(2, LOW);
-  digitalWrite(3, LOW);
-  digitalWrite(4, LOW);
-  digitalWrite(5, LOW);
+  digitalWrite(leftIn1, LOW);
+  digitalWrite(leftIn2, LOW);
+  digitalWrite(leftIn3, LOW);
+  digitalWrite(leftIn4, LOW);
 
-  digitalWrite(6, LOW);
-  digitalWrite(7, LOW);
-  digitalWrite(8, LOW);
-  digitalWrite(9, LOW);
+  digitalWrite(rightIn1, LOW);
+  digitalWrite(rightIn2, LOW);
+  digitalWrite(rightIn3, LOW);
+  digitalWrite(rightIn4, LOW);
 }
 
 
