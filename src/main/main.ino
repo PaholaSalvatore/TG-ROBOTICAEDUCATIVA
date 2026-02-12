@@ -1,24 +1,21 @@
 #include <LedControl.h>
-#include <RGBLED.h>
+#include <Stepper.h>
 
-#define STEP_DURATION 5000  // tiempo de cada paso en milisegundos
-#define MAX_STEPS 8         //Cantidad de pasos maxima permitida
-#define MOVEMENTS 3
-#define LIGHTS 4
+#define STEPS_PER_REV 2048    // Pasos por vuelta
+#define MOTOR_SPEED 10        // Velocidad RPM
+// Corrección física de la orientacion de los motores
+#define LEFT_MOTOR_INVERTED  1
+#define RIGHT_MOTOR_INVERTED -1
+
+#define STEP_DURATION 5000    // tiempo de cada paso en milisegundos
+#define MAX_STEPS 8           //Cantidad de pasos maxima permitida
+#define MOVEMENTS 5
+#define LIGHTS 6
 #define MELODIES 3
 #define ANIMATIONS 6
 #define MAX_ITERATIONS 4
 #define MIN_ITERATIONS 1
 #define ENCODER_STEPS_PER_CHANGE 3
-
-#define RED    255, 0, 0
-#define GREEN   0, 255, 0
-#define BLUE    0, 0, 255
-#define WHITE  255, 255, 255
-#define OFF 0, 0, 0
-
-// luces led rgb
-RGBLED led(32, 34, 36); 
 
 //matrices led
 LedControl face = LedControl(51, 52, 53, 2);
@@ -75,6 +72,37 @@ step sequence[MAX_STEPS];     // Arreglo para la Secuencia de pasos
 int maxConfiguredSteps = 2;   // Configuracion del selector de pasos 4, 6 u 8 
 int stepCount = 0;            // Cuántos pasos ya se han guardado (programado por el usuario)
 int currentStepIndex = 0;
+
+//Motores
+Stepper motorLeft(STEPS_PER_REV, 39, 43, 41, 45);
+Stepper motorRight(STEPS_PER_REV, 38, 42, 40, 44);
+
+// --- Movimientos de alto nivel ---
+
+void forward() {
+  Serial.println("Avanzar");
+  syncMove(STEPS_PER_REV, STEPS_PER_REV);
+}
+
+void backward() {
+  Serial.println("Retroceder");
+  syncMove(-STEPS_PER_REV, -STEPS_PER_REV);
+}
+
+void turnLeft() {
+  Serial.println("Girar izquierda");
+  syncMove(-STEPS_PER_REV, STEPS_PER_REV);
+}
+
+void turnRight() {
+  Serial.println("Girar derecha");
+  syncMove(STEPS_PER_REV, -STEPS_PER_REV);
+}
+
+void spin360() {
+  Serial.println("Giro 360");
+  syncMove(STEPS_PER_REV, STEPS_PER_REV);
+}
 
 /*-------------- ANIMACIONES -------------*/
 //Apagar matrices
@@ -308,19 +336,27 @@ void printSequence() {
 void executeMovement(int option){
   switch (option) {
     case 0:
-      Serial.println("Sin opciones seleccionadas");
+      Serial.println("Sin movimiento seleccionado");
       break;
 
     case 1:
-      Serial.println("Adelante");
+      forward();
       break;
 
     case 2:
-      Serial.println("Atras");
+      backward();
       break;
 
     case 3:
-      Serial.println("Stop");
+      turnRight();
+      break;
+    
+    case 4:
+      turnLeft();
+      break;
+    
+    case 5:
+      spin360();
       break;
   }
 }
@@ -328,28 +364,19 @@ void executeMovement(int option){
 void executeLight(int option){
   switch (option) {
     case 0:
-      led.setRGB(OFF);
-      Serial.println("Sin opciones seleccionadas");
+      Serial.println("Sin luces seleccionadas");
       break;
 
     case 1:
-      led.setRGB(RED);
-      Serial.println("ROJO");
+      Serial.println("Azul");
       break;
 
     case 2:
-      led.setRGB(BLUE);
-      Serial.println("AZUL");
+      Serial.println("Rojo");
       break;
 
     case 3:
-      led.setRGB(GREEN);
-      Serial.println("VERDE");
-      break;
-
-    case 4:
-      led.setRGB(WHITE);
-      Serial.println("BLANCO");
+      Serial.println("Amarillo");
       break;
   }
 }
@@ -357,7 +384,7 @@ void executeLight(int option){
 void executeMelody(int option){
   switch (option) {
     case 0:
-      Serial.println("Sin opciones seleccionadas");
+      Serial.println("Sin melodias seleccionadas");
       break;
 
     case 1:
@@ -379,6 +406,7 @@ void executeAnimation(int option){
 
   switch (option) {
     case 0:
+      Serial.println("Sin expresiones seleccionadas");
       break;
 
     case 1:
@@ -420,8 +448,7 @@ void executeAnimation(int option){
 }
 
 //ejecucion del paso
-void executeStep(step s){
-  
+void executeStep(step s){ 
   executeMovement(s.movement);
   executeLight(s.light);
   executeMelody(s.melody);
@@ -444,7 +471,6 @@ void executeSequence() {
 
 void resetProgram() {
   stepCount = 0;
-  currentStepIndex = 0;
 
   currentStep.movement = 0;
   currentStep.light = 0;
@@ -466,7 +492,38 @@ void resetHardwareState() {
   executeLight(0);      // apagar luces
   executeMelody(0);     // detener sonido
   executeAnimation(0);  // mostrar expresión neutra o apagar matriz
-  led.setRGB(OFF);
+  stopMotors();
+}
+
+void stopMotors() {
+  digitalWrite(2, LOW);
+  digitalWrite(3, LOW);
+  digitalWrite(4, LOW);
+  digitalWrite(5, LOW);
+
+  digitalWrite(6, LOW);
+  digitalWrite(7, LOW);
+  digitalWrite(8, LOW);
+  digitalWrite(9, LOW);
+}
+
+
+// --- Movimiento sincronizado base ---
+void syncMove(int leftSteps, int rightSteps) {
+
+  int steps = max(abs(leftSteps), abs(rightSteps));
+
+  int left = (leftSteps > 0) ? 1 : -1;
+  int right = (rightSteps > 0) ? 1 : -1;
+
+  for (int i = 0; i < steps; i++) {
+
+    if (i < abs(leftSteps))
+      motorLeft.step(left * LEFT_MOTOR_INVERTED);
+
+    if (i < abs(rightSteps))
+      motorRight.step(right * RIGHT_MOTOR_INVERTED);
+  }
 }
 
 //Lectura de los botones
@@ -538,6 +595,9 @@ void setup() {
   pinMode(previousStepButton, INPUT_PULLUP);
   pinMode(encoderS1, INPUT_PULLUP);
   pinMode(encoderS2, INPUT_PULLUP);
+
+  motorLeft.setSpeed(MOTOR_SPEED);
+  motorRight.setSpeed(MOTOR_SPEED);
 
   //set matrices
   for (int d = 0; d < 2; d++) {
