@@ -18,7 +18,7 @@
 #define OFF 0, 0, 0
 
 // luces led rgb
-RGBLED led(9, 10, 11); 
+RGBLED led(32, 34, 36); 
 
 //matrices led
 LedControl face = LedControl(51, 52, 53, 2);
