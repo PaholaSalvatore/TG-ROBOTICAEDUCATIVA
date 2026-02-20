@@ -28,6 +28,7 @@ bool melodyPlaying = false;
 #define MAX_ITERATIONS 4              // Iteraciones maximas ejecutables
 #define MIN_ITERATIONS 1              // Iteraciones minimas ejecutables
 #define ENCODER_STEPS_PER_CHANGE 3    // Regulacion de pulsos del encoder para seleccionar iteraciones
+#define ENCODER_STEPS_PER_REV 15
 
 // Colores RGB 
 #define RED    255, 0, 0
@@ -73,6 +74,8 @@ const int encoderS2 = 33;           //PIN S2
 int iterations = MIN_ITERATIONS;
 int lastS1State = HIGH;
 int encoderStepCounter = 0;
+int encoderPosition = 0;
+const int ledPins[4] = {2, 3, 4, 5};
 
 //Variables de estados relacionadas a los botones de accion
 int movementCounter = 0;
@@ -107,7 +110,7 @@ struct step{
 step currentStep;             // paso actual
 step sequence[MAX_STEPS];     // Arreglo para la Secuencia de pasos
 
-int maxConfiguredSteps = 2;   // Configuracion del selector de pasos 4, 6 u 8 
+int maxConfiguredSteps = 4;   // Configuracion del selector de pasos 4, 6 u 8 
 int stepCount = 0;            // Cuántos pasos ya se han guardado (programado por el usuario)
 int currentStepIndex = 0;     // Controlador del indice del arreglo de pasos
 
@@ -620,6 +623,11 @@ void resetHardwareState() {
   executeMelody(0);     // detener sonido
   stopMotors();         // detener motores
   turnDownLed();       // apagar matrices
+
+  for (int i = 0; i < 4; i++) {
+    digitalWrite(ledPins[i], LOW);
+  }
+
 }
 
 
@@ -697,8 +705,9 @@ bool pressedButton(int pin, buttonState &btn) {
 
 //Iteraciones por giro de perilla
 void readEncoder() {
-  int s1 = digitalRead(encoderS1);
+ int s1 = digitalRead(encoderS1);
   int s2 = digitalRead(encoderS2);
+  int position = 0;
 
   if (s1 != lastS1State) {
 
@@ -711,23 +720,53 @@ void readEncoder() {
 
     // Solo cambiar valor cuando se acumulan suficientes pasos
     if (encoderStepCounter >= ENCODER_STEPS_PER_CHANGE) {
-      iterations++;
+      encoderPosition++;
       encoderStepCounter = 0;
     }
     else if (encoderStepCounter <= -ENCODER_STEPS_PER_CHANGE) {
-      iterations--;
+      encoderPosition--;
       encoderStepCounter = 0;
     }
 
-    // CLAMP 1–4
-    if (iterations < MIN_ITERATIONS) iterations = MIN_ITERATIONS;
-    if (iterations > MAX_ITERATIONS) iterations = MAX_ITERATIONS;
+    // Normalizar vuelta
+    if (encoderPosition >= ENCODER_STEPS_PER_REV) 
+      encoderPosition = 0;
+    if (encoderPosition < 0) 
+      encoderPosition = ENCODER_STEPS_PER_REV - 1;
 
+  // Solo primera mitad (0–180°)
+    if (encoderPosition < ENCODER_STEPS_PER_REV / 2) {
+
+      // Dividir en zonas (cada 3 pasos aprox)
+      position = encoderPosition / ENCODER_STEPS_PER_CHANGE ;
+
+      if (position > ENCODER_STEPS_PER_CHANGE) 
+        position = ENCODER_STEPS_PER_CHANGE;
+
+      iterations = position + 1;
+    }
+    else {
+      // Segunda mitad → valor máximo
+      iterations = MAX_ITERATIONS;
+    }
     Serial.print("Iteraciones: ");
     Serial.println(iterations);
+    
+    actualizarLEDs();
+
   }
 
   lastS1State = s1;
+}
+
+void actualizarLEDs() {
+  for (int i = 0; i < 4; i++) {
+    if (i < iterations) {
+      digitalWrite(ledPins[i], HIGH);
+    } else {
+      digitalWrite(ledPins[i], LOW);
+    }
+  }
 }
 
 /*============= SET UP ============*/
@@ -762,6 +801,12 @@ void setup() {
     face.setIntensity(d, 5);
     face.clearDisplay(d);
   }
+
+  for (int i = 0; i < 4; i++) {
+    pinMode(ledPins[i], OUTPUT);
+  }
+
+  actualizarLEDs();
 
   Serial.println("INICIO DEL PROGRAMA");
 }
