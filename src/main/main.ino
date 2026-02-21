@@ -58,15 +58,15 @@ Stepper motorRight(STEPS_PER_REV, rightIn1, rightIn3, rightIn2, rightIn4);
 
 // Botones y encoder
 const int movementButton = 22;      //boton para seleccionar los movimientos
+const int melodyButton = 23;        //Boton para seleccionar las melodia
 const int lightButton = 24;         //Boton para seleccionar las luces
-const int melodyButton = 26;        //Boton para seleccionar las melodia
-const int animationButton = 28;     //Boton para seleccionar las animacion de ojos y boca
-const int previousStepButton = 23;  //Boton para regresar al paso anterior
-const int nextStepButton = 25;      //Boton para avanzar al siguiente paso
+const int animationButton = 25;     //Boton para seleccionar las animacion de ojos y boca
+const int previousStepButton = 26;  //Boton para regresar al paso anterior
+const int nextStepButton = 27;      //Boton para avanzar al siguiente paso
 
-const int startButton = 30;         //Boton para iniciar ejecucion de pasos
-const int encoderS1 = 31;           //PIN S1
-const int encoderS2 = 33;           //PIN S2
+const int startButton = 28;         //Boton para iniciar ejecucion de pasos
+const int encoderS1 = 29;           //PIN S1
+const int encoderS2 = 30;           //PIN S2
 
 /*=========== VARIABLES DE CONTROL =============*/
 
@@ -75,7 +75,7 @@ int iterations = MIN_ITERATIONS;
 int lastS1State = HIGH;
 int encoderStepCounter = 0;
 int encoderPosition = 0;
-const int ledPins[4] = {2, 3, 4, 5};
+const int ledPins[4] = {31, 33, 35, 37};
 
 //Variables de estados relacionadas a los botones de accion
 int movementCounter = 0;
@@ -174,12 +174,12 @@ void backward() {
 
 void turnLeft() {
   Serial.println("Girar izquierda");
-  startMove(-STEPS_PER_REV, STEPS_PER_REV);
+  startMove(-STEPS_PER_REV/2, STEPS_PER_REV/2);
 }
 
 void turnRight() {
   Serial.println("Girar derecha");
-  startMove(STEPS_PER_REV, -STEPS_PER_REV);
+  startMove(STEPS_PER_REV/2, -STEPS_PER_REV/2);
 }
 
 void spin360() {
@@ -880,7 +880,9 @@ void loop() {
   }
 
   /*============= ITERACIONES ==========*/
-  readEncoder();   // siempre leer encoder
+  if (!sequenceRunning){
+    readEncoder();   // siempre leer encoder
+  }
 
   /*================ INICIO ==================*/
   if (pressedButton(startButton, btnStart)) {
