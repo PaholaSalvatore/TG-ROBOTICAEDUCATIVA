@@ -3,6 +3,9 @@
 #include <Stepper.h>
 #include <RGBLED.h>
 #include <DFRobotDFPlayerMini.h>
+#include <Adafruit_GFX.h>
+#include <MCUFRIEND_kbv.h>
+#include "SdFat.h"
 
 DFRobotDFPlayerMini player;
 HardwareSerial &mp3 = Serial1;
@@ -34,8 +37,26 @@ bool melodyPlaying = false;
 #define RED    255, 0, 0
 #define GREEN   0, 255, 0
 #define BLUE    0, 0, 255
+#define YELLOW 252, 255, 0
+#define PURPLE 204, 0, 255
+#define PINK 255, 0, 204
+#define ORANGE 255, 128, 0
 #define WHITE  255, 255, 255
 #define OFF 0, 0, 0
+
+// Pines TFT
+const uint8_t SD_CS_PIN = 10;
+const uint8_t SOFT_MISO_PIN = 12;
+const uint8_t SOFT_MOSI_PIN = 11;
+const uint8_t SOFT_SCK_PIN  = 13;
+
+// Soft SPI
+SoftSpiDriver<SOFT_MISO_PIN, SOFT_MOSI_PIN, SOFT_SCK_PIN> softSpi;
+#define SD_CONFIG SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(0), &softSpi)
+
+MCUFRIEND_kbv tft;
+SdFat sd;
+File bmpFile;
 
 /*============= DEFINICION DE COMPONENTES ===========*/
 
@@ -68,6 +89,16 @@ const int startButton = 28;         //Boton para iniciar ejecucion de pasos
 const int encoderS1 = 29;           //PIN S1
 const int encoderS2 = 30;           //PIN S2
 
+// Dimensiones y posiciones de la iconografia
+int sizeIcon = 100;
+int sizeBarWidth = 220;
+int sizeBarHeight = 50;
+int leftX  = 10;
+int rightX = 130;
+int row1 = 20;
+int row2 = ((2 * row1) + sizeIcon);
+int row3 = 260;
+
 /*=========== VARIABLES DE CONTROL =============*/
 
 //Variables de control del encoder
@@ -96,6 +127,7 @@ buttonState btnAnimation   = {HIGH, HIGH, 0};
 buttonState btnStart  = {HIGH, HIGH, 0};
 buttonState btnNextStep   = {HIGH, HIGH, 0};
 buttonState btnPreviousStep = {HIGH, HIGH, 0};
+
 
 /*========== MODELO DE PASOS ==========*/
 
@@ -279,13 +311,13 @@ void rightSadEye(int d) {
 //Ojitos enojados
 void angryEyes(int d) {
   int puntos[][2] = {
-    {0,1},{0,6},
-    {1,2},{1,5},
-    {2,3},{2,4},
-    {4,2},{4,3},{4,4},{4,5},
-    {5,2},{5,3},{5,5},
-    {6,2},{6,3},{6,4},{6,5},
-    {7,2},{7,3},{7,4},{7,5},
+    {0,0},{0,1}, {0,2},{0,3},
+    {1,0},{1,1},{1,2},{1,3},{1,4},
+    {2,0},{2,1},{2,2},{2,3},{2,4},{2,5},
+    {3,0},{3,1},{3,2},{3,3},{3,4},{3,5},{3,6},
+    {4,0},{4,1},{4,2},{4,3},{4,6},
+    {5,0},{5,1},{5,2},{5,3},{5,6},
+    {6,0},{6,1},{6,2},{6,3},{6,4},{6,5},{6,6}
   };
   
   for (auto &p : puntos) face.setLed(d, p[0], p[1], true);
@@ -408,8 +440,23 @@ void executeLight(int option){
       break;
 
     case 4:
-      led.setRGB(WHITE);
-      Serial.println("BLANCO");
+      led.setRGB(PINK);
+      Serial.println("ROSADO");
+      break;
+      
+    case 5:
+      led.setRGB(PURPLE);
+      Serial.println("MORADO");
+      break;
+
+    case 6:
+      led.setRGB(YELLOW);
+      Serial.println("AMARILLO");
+      break;
+
+    case 7:
+      led.setRGB(ORANGE);
+      Serial.println("NARANJA");
       break;
   }
 }
@@ -457,41 +504,41 @@ void executeAnimation(int option){
       break;
 
     case 1:
-      Serial.println("Expresion Dizzy");
-      dizzyEyes(1);
-      dizzyEyes(0);
-      break;
-
-    case 2:
       Serial.println("Guiño de ojo");
-      openedEye(0);
+      openEye(0);
       blinkedEye(1);
       break;
 
-    case 3:
-      Serial.println("Expresion enamorado");
-      heartEyes(0);
-      heartEyes(1);
+    case 2:
+      Serial.println("Neutro");
+      dizzyEyes(0);
+      dizzyEyes(1);
       break;
 
-    case 4:
-      Serial.println("Expresion triste");
+    case 3:
+      Serial.println("Triste");
       leftSadEye(1);
       rightSadEye(0);
       break;
 
-    case 5:
-      Serial.println("Expresion Feliz");
-      openedEye(0);
-      openedEye(1);
-      break;
-
-    case 6:
-      Serial.println("Expresion molesta");
+    case 4:
+      Serial.println("Enojado");
       angryEyes(0);
       angryEyes(1);
       break;
+
+    case 5:
+      Serial.println("Enamorado");
+      heartEyes(0);
+      heartEyes(1);
+
+    case 6:
+      Serial.println("Curioso");
+      openedEye(0);
+      openedEye(1);
+      break;
   }
+
 }
 
 // ================= SEQUENCE SCHEDULER =================
@@ -620,13 +667,17 @@ void resetProgram() {
 
 void resetHardwareState() {
   led.setRGB(OFF);      // apagar luces led RGB
-  executeMelody(0);     // detener sonido
+  player.stop();
+    melodyPlaying = false;
   stopMotors();         // detener motores
-  turnDownLed();       // apagar matrices
+  turnDownLed();        // apagar matrices
 
+  //Apagar leds de iteraciones
   for (int i = 0; i < 4; i++) {
     digitalWrite(ledPins[i], LOW);
   }
+
+  Serial.println("Hardware reiniciado");
 
 }
 
@@ -769,10 +820,59 @@ void actualizarLEDs() {
   }
 }
 
+// ================= MOSTRAR IMAGENES ===============
+void drawRAW(const char *filename, int x, int y, int w, int h) {
+
+    File file = sd.open(filename);
+
+    if (!file) {
+        Serial.println("No se pudo abrir RAW");
+        return;
+    }
+
+    uint16_t buffer[240];  
+
+    for (int row = 0; row < h; row++) {
+        // 🔥 POSICIÓN EXACTA EN EL ARCHIVO
+        file.seek(row * w * 2);
+
+        // leer fila exacta
+        file.read((uint8_t*)buffer, w * 2);
+
+        tft.setAddrWindow(x, y + row, x + w - 1, y + row);
+        tft.pushColors(buffer, w, true);
+    }
+
+    file.close();
+}
+
 /*============= SET UP ============*/
 
 void setup() {
   Serial.begin(9600);  
+
+  uint16_t ID = tft.readID();
+  tft.begin(ID);
+  tft.setRotation(0);   // vertical
+  tft.fillScreen(0x0000);
+
+  Serial.println("Iniciando SD...");
+
+  if (!sd.begin(SD_CONFIG)) {
+    Serial.println("Error SD");
+    tft.setTextColor(0xF800);
+    tft.println("SD Error");
+    return;
+  }
+
+  Serial.println("SD OK");
+
+  // 🔥 Mostrar imagenes derecha
+  drawRAW("move.raw", leftX, row1, sizeIcon, sizeIcon);
+  drawRAW("music.raw", rightX, row1, sizeIcon, sizeIcon);
+  drawRAW("color.raw", leftX, row2, sizeIcon, sizeIcon);
+  drawRAW("eyes.raw", rightX, row2, sizeIcon, sizeIcon);  
+  drawRAW("bar.raw", leftX, row3, sizeBarWidth, sizeBarHeight);
   
   mp3.begin(9600);    // DFPlayer en TX1/RX1
   if (player.begin(mp3)) {
