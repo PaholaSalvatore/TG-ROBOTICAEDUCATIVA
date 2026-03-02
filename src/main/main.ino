@@ -20,8 +20,9 @@ bool melodyPlaying = false;
 #define LEFT_MOTOR_INVERTED  1
 #define RIGHT_MOTOR_INVERTED -1
 
-#define STEP_DURATION 8000    // tiempo de cada paso en milisegundos
-#define MAX_STEPS 8           //Cantidad de pasos maxima permitida
+#define STEP_DURATION 10000    // tiempo de cada paso en milisegundos
+#define MAX_STEPS 6           // Cantidad de pasos maxima permitida
+#define MIN_STEPS 4           // Cantidad de pasos minima permitida
 
 #define MOVEMENTS 6   // Opciones de movimientos que puede ejecutar el robot
 #define LIGHTS 7      // Opciones de luces que puede ejecutar el robot
@@ -139,7 +140,7 @@ struct step{
   uint8_t animation;
 };
 
-const int 
+const int stepSelector = 47;
 
 step currentStep;             // paso actual
 step sequence[MAX_STEPS];     // Arreglo para la Secuencia de pasos
@@ -366,6 +367,66 @@ void loadStep(int index) {
     Serial.print(currentStep.melody);
     Serial.print(" | A:");
     Serial.println(currentStep.animation);
+}
+
+void updateStepMode() {
+
+  static int lastState = HIGH;
+
+  int state = digitalRead(stepSelector);
+
+  if (state != lastState) {
+
+    delay(20);
+    state = digitalRead(stepSelector);
+
+    if (state != lastState) {
+
+      //Cambiar modo
+      if (state == LOW) {
+        maxConfiguredSteps = MIN_STEPS;   // 4
+      } else {
+        maxConfiguredSteps = MAX_STEPS;   // 6
+      }
+
+      Serial.print("Modo pasos: ");
+      Serial.println(maxConfiguredSteps);
+      Serial.println(digitalRead(stepSelector));
+
+      //AJUSTAR ÍNDICE
+      currentStepIndex = constrain(currentStepIndex, 0, maxConfiguredSteps - 1);
+
+      // AJUSTAR stepCount (MUY IMPORTANTE)
+      if (stepCount > maxConfiguredSteps) {
+        stepCount = maxConfiguredSteps;
+      }
+
+      //LIMPIAR PASOS EXTRA (de 6 → 4)
+      for (int i = maxConfiguredSteps; i < MAX_STEPS; i++) {
+        sequence[i] = {0,0,0,0};
+      }
+
+      //REDIBUJAR UI COMPLETA
+      updateIcons(currentStep);
+      updateBar(currentStepIndex);
+
+      lastState = state;
+    }
+  }
+}
+
+void initStepMode() {
+
+  int state = digitalRead(stepSelector);
+
+  if (state == LOW) {
+    maxConfiguredSteps = MIN_STEPS;   // 4
+  } else {
+    maxConfiguredSteps = MAX_STEPS;   // 6
+  }
+
+  Serial.print("Modo inicial: ");
+  Serial.println(maxConfiguredSteps);
 }
 
 // Ejecuciones
@@ -803,7 +864,7 @@ void updateIcons(step s) {
 void updateBar(int stepIndex) {
 
   char filename[20];
-  sprintf(filename, "bar%d.raw", stepIndex);
+  sprintf(filename, "bar%d_%d.raw", maxConfiguredSteps, stepIndex);
 
   drawRAW(filename, leftX, row3, sizeBarWidth, sizeBarHeight);
 }
@@ -812,6 +873,9 @@ void updateBar(int stepIndex) {
 
 void setup() {
   Serial.begin(9600);  
+
+  pinMode(stepSelector, INPUT_PULLUP);
+  initStepMode();
 
   uint16_t ID = tft.readID();
   tft.begin(ID);
@@ -875,88 +939,91 @@ void setup() {
 /*================= LOOP ====================*/
 
 void loop() {
-  
-  /*================= BOTON MOVIMIENTO ==============*/
+  if (!sequenceRunning){  
+    Serial.println(digitalRead(stepSelector));
+    delay(200);  
+    updateStepMode();
 
-  if (pressedButton(movementButton, btnMove)){
-    movementCounter++;      
-    if (movementCounter > MOVEMENTS) 
-      movementCounter = 0;  
-    currentStep.movement = movementCounter;
+    /*================= BOTON MOVIMIENTO ==============*/
 
-    updateMovementIcon(movementCounter);
-  }
+    if (pressedButton(movementButton, btnMove)){
+      movementCounter++;      
+      if (movementCounter > MOVEMENTS) 
+        movementCounter = 0;  
+      currentStep.movement = movementCounter;
 
-  /*============= BOTON LUCES =================*/
+      updateMovementIcon(movementCounter);
+    }
 
-  if (pressedButton(lightButton, btnLight)){
-    lightCounter++; 
-    if (lightCounter > LIGHTS) lightCounter = 0;    
-    currentStep.light = lightCounter;
+    /*============= BOTON LUCES =================*/
 
-    updateLightIcon(lightCounter);
-  }
+    if (pressedButton(lightButton, btnLight)){
+      lightCounter++; 
+      if (lightCounter > LIGHTS) lightCounter = 0;    
+      currentStep.light = lightCounter;
 
-  /*================ BOTON MELODIAS ==============*/
+      updateLightIcon(lightCounter);
+    }
 
-  if (pressedButton(melodyButton, btnMelody)){
-    melodyCounter++;
-    if (melodyCounter > MELODIES) melodyCounter = 0;    
-    currentStep.melody = melodyCounter;
+    /*================ BOTON MELODIAS ==============*/
 
-    updateMelodyIcon(melodyCounter);
-  }
+    if (pressedButton(melodyButton, btnMelody)){
+      melodyCounter++;
+      if (melodyCounter > MELODIES) melodyCounter = 0;    
+      currentStep.melody = melodyCounter;
 
-  /*============== BOTON ANIMACIONES =================*/
+      updateMelodyIcon(melodyCounter);
+    }
 
-  if (pressedButton(animationButton, btnAnimation)){
-    animationCounter++;
-    if (animationCounter > ANIMATIONS) animationCounter = 0;   
-    currentStep.animation = animationCounter;
+    /*============== BOTON ANIMACIONES =================*/
 
-    updateAnimationIcon(animationCounter);
-  }
+    if (pressedButton(animationButton, btnAnimation)){
+      animationCounter++;
+      if (animationCounter > ANIMATIONS) animationCounter = 0;   
+      currentStep.animation = animationCounter;
 
-  /*========= SIGUIENTE PASO ========*/
+      updateAnimationIcon(animationCounter);
+    }
 
-  if (pressedButton(nextStepButton, btnNextStep)) {
+    /*========= SIGUIENTE PASO ========*/
 
-    saveCurrentStepAtIndex();
+    if (pressedButton(nextStepButton, btnNextStep)) {
 
-    if (currentStepIndex < maxConfiguredSteps - 1) {
-      currentStepIndex++;
+      saveCurrentStepAtIndex();
 
-      if (currentStepIndex < stepCount) {
-        loadStep(currentStepIndex);   // paso ya existente
-        updateIcons(sequence[currentStepIndex]);
-        updateBar(currentStepIndex);
-      } else {
-        // paso nuevo → limpio
-        currentStep = {0, 0, 0, 0};
-        movementCounter = lightCounter = melodyCounter = animationCounter = 0;
+      if (currentStepIndex < maxConfiguredSteps - 1) {
+        currentStepIndex++;
+
+        if (currentStepIndex < stepCount) {
+          loadStep(currentStepIndex);   // paso ya existente
+          updateIcons(sequence[currentStepIndex]);
+          updateBar(currentStepIndex);
+        } else {
+          // paso nuevo → limpio
+          currentStep = {0, 0, 0, 0};
+          movementCounter = lightCounter = melodyCounter = animationCounter = 0;
+          updateIcons(sequence[currentStepIndex]);
+          updateBar(currentStepIndex);
+        }
+      }
+    }
+
+    /*============== PASO ANTERIOR ============*/
+
+    if (pressedButton(previousStepButton, btnPreviousStep)) {
+
+      saveCurrentStepAtIndex();
+
+      if (currentStepIndex > 0) {
+        currentStepIndex--;
+        loadStep(currentStepIndex);
         updateIcons(sequence[currentStepIndex]);
         updateBar(currentStepIndex);
       }
     }
-  }
 
-  /*============== PASO ANTERIOR ============*/
-
-  if (pressedButton(previousStepButton, btnPreviousStep)) {
-
-    saveCurrentStepAtIndex();
-
-    if (currentStepIndex > 0) {
-      currentStepIndex--;
-      loadStep(currentStepIndex);
-      updateIcons(sequence[currentStepIndex]);
-      updateBar(currentStepIndex);
-    }
-  }
-
-  /*============= ITERACIONES ==========*/
-  if (!sequenceRunning){
-    readEncoder();   // siempre leer encoder
+    /*============= ITERACIONES ==========*/
+      readEncoder();   // siempre leer encoder
   }
 
   /*================ INICIO ==================*/
