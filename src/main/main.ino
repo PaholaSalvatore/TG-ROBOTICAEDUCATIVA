@@ -139,6 +139,8 @@ struct step{
   uint8_t animation;
 };
 
+const int 
+
 step currentStep;             // paso actual
 step sequence[MAX_STEPS];     // Arreglo para la Secuencia de pasos
 
@@ -366,27 +368,6 @@ void loadStep(int index) {
     Serial.println(currentStep.animation);
 }
 
-/*void printSequence() {
-  Serial.println("=== Contenido de la secuencia ===");
-
-  for (int i = 0; i < stepCount; i++) {
-    Serial.print("Paso ");
-    Serial.print(i);
-    Serial.print(" -> ");
-
-    Serial.print("M:");
-    Serial.print(sequence[i].movement);
-    Serial.print(" | L:");
-    Serial.print(sequence[i].light);
-    Serial.print(" | Me:");
-    Serial.print(sequence[i].melody);
-    Serial.print(" | A:");
-    Serial.println(sequence[i].animation);
-  }
-
-  Serial.println("===============================");
-}*/
-
 // Ejecuciones
 
 void executeMovement(int option){
@@ -613,9 +594,9 @@ void updateSequence() {
     Serial.println(executingIteration + 1);
 
     // Ejecutar el paso actual
-    executeStep(sequence[executingIndex]);
     updateIcons(sequence[executingIndex]);
     updateBar(executingIndex);
+    executeStep(sequence[executingIndex]);
 
     stepStart = millis();
     stepRunning = true;
@@ -631,20 +612,6 @@ void updateSequence() {
   }
 }
 
-/*void executeSequence() {
-  Serial.println("=== Ejecutando secuencia ===");
-
-  for (int i = 0; i < stepCount; i++) {
-    Serial.print("Paso ");
-    Serial.println(i);
-
-    executeStep(sequence[i]);   // Acciones concurrentes
-    delay(STEP_DURATION);       // Mantener el paso activo
-  }
-
-  Serial.println("=== Fin de la secuencia ===");
-}*/
-
 /*========== REINICIO ===========*/
 
 void resetProgram() {
@@ -656,12 +623,17 @@ void resetProgram() {
   currentStep.melody = 0;
   currentStep.animation = 0;
 
+  for (int i=0 ; i < maxConfiguredSteps; i++){
+    sequence[i] = currentStep;
+  }
+
   movementCounter = 0;
   lightCounter = 0;
   melodyCounter = 0;
   animationCounter = 0;
 
   updateIcons(currentStep);
+  updateBar(currentStepIndex);
 
   Serial.println("Sistema reiniciado. Listo para nueva secuencia.");
 }
@@ -681,25 +653,6 @@ void resetHardwareState() {
   Serial.println("Hardware reiniciado");
 
 }
-
-
-/* --- Movimiento sincronizado base ---
-void syncMove(int leftSteps, int rightSteps) {
-
-  int steps = max(abs(leftSteps), abs(rightSteps));
-
-  int left = (leftSteps > 0) ? 1 : -1;
-  int right = (rightSteps > 0) ? 1 : -1;
-
-  for (int i = 0; i < steps; i++) {
-
-    if (i < abs(leftSteps))
-      motorLeft.step(left * LEFT_MOTOR_INVERTED);
-
-    if (i < abs(rightSteps))
-      motorRight.step(right * RIGHT_MOTOR_INVERTED);
-  }
-}*/
 
 //Lectura de los botones
 bool pressedButton(int pin, buttonState &btn) {
@@ -831,7 +784,7 @@ void updateLightIcon(int value) {
 void updateMelodyIcon(int value) {
   char filename[20];
   sprintf(filename, "music%d.raw", value);
-  drawRAW(filename, right, row1, sizeIcon, sizeIcon);
+  drawRAW(filename, rightX, row1, sizeIcon, sizeIcon);
 }
 
 void updateAnimationIcon(int value) {
@@ -886,6 +839,7 @@ void setup() {
   } else {
     Serial.println("DFPlayer no detectado, continuando sin audio");
   }
+  player.volume(30);  // Volumen de 0 a 30
 
   //set botones
   pinMode(movementButton, INPUT_PULLUP);
@@ -1015,6 +969,4 @@ void loop() {
     updateSequence();
     return;
   }
-
-
 }
