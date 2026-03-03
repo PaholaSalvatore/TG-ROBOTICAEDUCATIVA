@@ -59,6 +59,15 @@ MCUFRIEND_kbv tft;
 SdFat sd;
 File bmpFile;
 
+/* ============== ESTADOS BARRA DE PROGRESO UI ==========*/
+
+bool barTransitionActive = false;
+int barTransitionStep = 0;
+unsigned long barTransitionTime = 0;
+
+const int barTransitionFrames = 15;   // suavidad
+const int barTransitionInterval = 15; // velocidad ms
+
 /*============= DEFINICION DE COMPONENTES ===========*/
 
 RGBLED led(32, 34, 36);                       // luces led rgb
@@ -129,6 +138,12 @@ buttonState btnStart  = {HIGH, HIGH, 0};
 buttonState btnNextStep   = {HIGH, HIGH, 0};
 buttonState btnPreviousStep = {HIGH, HIGH, 0};
 
+/* ====== CAMBIOS DEL BOTON DE INICIO ======*/
+unsigned long startPressTime = 0;
+bool startWasPressed = false;
+
+const unsigned long LONG_PRESS_TIME = 1000; // 1 segundo
+bool sequencePaused = false;
 
 /*========== MODELO DE PASOS ==========*/
 
@@ -408,7 +423,7 @@ void updateStepMode() {
 
       //REDIBUJAR UI COMPLETA
       updateIcons(currentStep);
-      updateBar(currentStepIndex);
+      startBarTransition();
 
       lastState = state;
     }
@@ -869,6 +884,36 @@ void updateBar(int stepIndex) {
   drawRAW(filename, leftX, row3, sizeBarWidth, sizeBarHeight);
 }
 
+void startBarTransition() {
+  barTransitionActive = true;
+  barTransitionStep = 0;
+  barTransitionTime = millis();
+}
+
+void updateBarTransition() {
+
+  // bloquear animación si el robot está ejecutando
+  if (sequenceRunning) return;
+
+  if (!barTransitionActive) return;
+
+  if (millis() - barTransitionTime < barTransitionInterval) return;
+
+  barTransitionTime = millis();
+
+  int wipeWidth = map(barTransitionStep, 0, barTransitionFrames, 0, sizeBarWidth);
+
+  tft.fillRect(leftX, row3, wipeWidth, sizeBarHeight, 0x0000);
+
+  barTransitionStep++;
+
+  if (barTransitionStep > barTransitionFrames) {
+
+    updateBar(currentStepIndex);
+    barTransitionActive = false;
+  }
+}
+
 /*============= SET UP ============*/
 
 void setup() {
@@ -939,17 +984,17 @@ void setup() {
 /*================= LOOP ====================*/
 
 void loop() {
+
+  updateBarTransition();
+
   if (!sequenceRunning){  
-    Serial.println(digitalRead(stepSelector));
-    delay(200);  
     updateStepMode();
 
     /*================= BOTON MOVIMIENTO ==============*/
 
     if (pressedButton(movementButton, btnMove)){
       movementCounter++;      
-      if (movementCounter > MOVEMENTS) 
-        movementCounter = 0;  
+      if (movementCounter > MOVEMENTS) movementCounter = 0;  
       currentStep.movement = movementCounter;
 
       updateMovementIcon(movementCounter);
