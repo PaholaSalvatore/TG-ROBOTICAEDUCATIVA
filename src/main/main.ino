@@ -145,6 +145,8 @@ bool startWasPressed = false;
 const unsigned long LONG_PRESS_TIME = 1000; // 1 segundo
 bool sequencePaused = false;
 
+unsigned long pauseStartTime = 0;
+
 /*========== MODELO DE PASOS ==========*/
 
 // Modelo de datos para los pasos
@@ -618,9 +620,16 @@ void executeStep(step s){
 }
 
 void startSequence(){
+  if(sequenceRunning) return;
+
+  // 🔥 GUARDAR SIEMPRE EL PASO ACTUAL
+  sequence[currentStepIndex] = currentStep;
+
+  if (currentStepIndex == stepCount && stepCount < maxConfiguredSteps) {
+    stepCount++;
+  }
 
   if(stepCount==0) return;
-  if(sequenceRunning) return;
 
   executingIndex = 0;
   executingIteration = 0;
@@ -638,6 +647,8 @@ void updateSequence() {
   // Si no hay secuencia corriendo → no hacer nada
   if (!sequenceRunning) return;
 
+  //si esta pausado --> no avanza
+  if (sequencePaused) return;
 
   // --- INICIAR PASO NUEVO ---
   if (!stepRunning) {
@@ -751,6 +762,64 @@ bool pressedButton(int pin, buttonState &btn) {
 
   btn.lastRead = read;
   return false;
+}
+
+void handleStartButton() {
+
+  bool read = digitalRead(startButton);
+
+  // Detectar PRESIONADO
+  if (read == LOW && !startWasPressed) {
+    startWasPressed = true;
+    startPressTime = millis();
+  }
+
+  // Detectar SOLTADO
+  if (read == HIGH && startWasPressed) {
+
+    startWasPressed = false;
+
+    unsigned long pressDuration = millis() - startPressTime;
+
+    // --------- PULSACIÓN LARGA ----------
+    if (pressDuration > LONG_PRESS_TIME) {
+
+      Serial.println("RESET");
+
+      sequenceRunning = false;
+      sequencePaused = false;
+
+      resetProgram();
+      resetHardwareState();
+    }
+
+    // --------- PULSACIÓN CORTA ----------
+    else {
+
+      if (!sequenceRunning) {
+        Serial.println("START");
+        startSequence();
+      }
+      else if (sequenceRunning && !sequencePaused) {
+        Serial.println("PAUSA");
+        sequencePaused = true;
+        pauseStartTime = millis();  // GUARDAR MOMENTO DE PAUSA
+
+        if(melodyPlaying){
+          player.pause();
+        }
+      }
+      else if (sequencePaused) {
+        Serial.println("REANUDAR");
+        sequencePaused = false;
+        stepStart += millis() - pauseStartTime; // AJUSTAR EL TIEMPO DEL PASO
+
+        if(melodyPlaying){
+          player.start();
+        }
+      }
+    }
+  }
 }
 
 //Iteraciones por giro de perilla
@@ -1072,9 +1141,7 @@ void loop() {
   }
 
   /*================ INICIO ==================*/
-  if (pressedButton(startButton, btnStart)) {
-    startSequence();
-  }
+  handleStartButton();
 
   if (sequenceRunning){
     updateMotors();
