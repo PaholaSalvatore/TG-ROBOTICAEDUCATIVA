@@ -38,10 +38,10 @@ bool melodyPlaying = false;
 #define RED    255, 0, 0
 #define GREEN   0, 255, 0
 #define BLUE    0, 0, 255
-#define YELLOW 252, 255, 0
-#define PURPLE 204, 0, 255
-#define PINK 255, 0, 204
-#define ORANGE 255, 128, 0
+#define YELLOW 255, 255, 0
+#define PINK 148, 0, 211
+#define PURPLE 255, 0, 255
+#define ORANGE 200, 140, 0
 #define WHITE  255, 255, 255
 #define OFF 0, 0, 0
 
@@ -1137,7 +1137,7 @@ void loop() {
     }
 
     /*============= ITERACIONES ==========*/
-      readEncoder();   // siempre leer encoder
+    readEncoder();   // siempre leer encoder
   }
 
   /*================ INICIO ==================*/
