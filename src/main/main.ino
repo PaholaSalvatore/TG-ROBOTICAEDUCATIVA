@@ -68,6 +68,8 @@ unsigned long barTransitionTime = 0;
 const int barTransitionFrames = 15;   // suavidad
 const int barTransitionInterval = 15; // velocidad ms
 
+//bool barTransitionActive = false;
+
 /*============= DEFINICION DE COMPONENTES ===========*/
 
 RGBLED led(32, 34, 36);                       // luces led rgb
@@ -117,6 +119,12 @@ int lastS1State = HIGH;
 int encoderStepCounter = 0;
 int encoderPosition = 0;
 const int ledPins[4] = {31, 33, 35, 37};
+
+bool blinkActive = false;
+int blinkLed = 0;
+int blinkCount = 0;
+
+unsigned long blinkTimer = 0;
 
 //Variables de estados relacionadas a los botones de accion
 int movementCounter = 0;
@@ -343,7 +351,6 @@ void angryEyes(int d) {
   
   for (auto &p : puntos) face.setLed(d, p[0], p[1], true);
 }
-
 
 /* ------ MEMORIA -------*/
 void saveCurrentStepAtIndex() {
@@ -622,7 +629,7 @@ void executeStep(step s){
 void startSequence(){
   if(sequenceRunning) return;
 
-  // 🔥 GUARDAR SIEMPRE EL PASO ACTUAL
+  // GUARDAR SIEMPRE EL PASO ACTUAL
   sequence[currentStepIndex] = currentStep;
 
   if (currentStepIndex == stepCount && stepCount < maxConfiguredSteps) {
@@ -633,6 +640,7 @@ void startSequence(){
 
   executingIndex = 0;
   executingIteration = 0;
+  startBlink(0);
 
   stepRunning = false;   // ← IMPORTANTE
   stepStart = millis();  // ← sincroniza reloj
@@ -657,6 +665,7 @@ void updateSequence() {
     if (executingIndex >= stepCount) {
 
       executingIteration++;
+      startBlink(executingIteration);
 
       // ¿Ya terminamos todas las iteraciones?
       if (executingIteration >= iterations) {
@@ -699,6 +708,35 @@ void updateSequence() {
   }
 }
 
+void startBlink(int ledIndex){
+
+  blinkActive = true;
+  blinkLed = ledIndex;
+  blinkCount = 0;
+
+  blinkTimer = millis();
+}
+
+void updateBlink(){
+
+  if(!blinkActive) return;
+
+  if(millis() - blinkTimer > 120){
+
+    blinkTimer = millis();
+
+    digitalWrite(ledPins[blinkLed], !digitalRead(ledPins[blinkLed]));
+
+    blinkCount++;
+
+    if(blinkCount >= 6){   // 3 parpadeos
+
+      digitalWrite(ledPins[blinkLed], HIGH);
+      blinkActive = false;
+    }
+  }
+}
+
 /*========== REINICIO ===========*/
 
 void resetProgram() {
@@ -721,6 +759,11 @@ void resetProgram() {
 
   updateIcons(currentStep);
   updateBar(currentStepIndex);
+
+  blinkActive = 0;
+  blinkCount = 0;
+
+  actualizarLEDs();
 
   Serial.println("Sistema reiniciado. Listo para nueva secuencia.");
 }
@@ -1142,6 +1185,7 @@ void loop() {
 
   /*================ INICIO ==================*/
   handleStartButton();
+  updateBlink();
 
   if (sequenceRunning){
     updateMotors();
