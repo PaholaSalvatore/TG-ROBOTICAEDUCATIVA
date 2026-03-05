@@ -68,8 +68,6 @@ unsigned long barTransitionTime = 0;
 const int barTransitionFrames = 15;   // suavidad
 const int barTransitionInterval = 15; // velocidad ms
 
-//bool barTransitionActive = false;
-
 /*============= DEFINICION DE COMPONENTES ===========*/
 
 RGBLED led(32, 34, 36);                       // luces led rgb
@@ -395,7 +393,7 @@ void loadStep(int index) {
 
 void updateStepMode() {
 
-  static int lastState = HIGH;
+  static int lastState = digitalRead(stepSelector);
 
   int state = digitalRead(stepSelector);
 
