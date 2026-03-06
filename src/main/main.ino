@@ -7,20 +7,24 @@
 #include <MCUFRIEND_kbv.h>
 #include "SdFat.h"
 
-DFRobotDFPlayerMini player;
-HardwareSerial &mp3 = Serial1;
-
-bool melodyPlaying = false;
 /*============= CONFIGURACIONES GLOBALES ================*/
 
 #define STEPS_PER_REV 2048    // Pasos por vuelta
+#define HALF_STEPS_PER_REV STEPS_PER_REV/2
 #define MOTOR_SPEED 10        // Velocidad RPM
+
+#define SECONDS_PER_MINUTE 60UL
+#define MS_PER_SECOND 1000UL
+#define MS_PER_MINUTE (SECONDS_PER_MINUTE * MS_PER_SECOND)
+
+#define REVOLUTION_TIME_MS (MS_PER_MINUTE / MOTOR_SPEED)
+#define HALF_REV_TIME_MS (REVOLUTION_TIME_MS / 2)
 
 // Corrección física de la orientacion de los motores
 #define LEFT_MOTOR_INVERTED  1
 #define RIGHT_MOTOR_INVERTED -1
 
-#define STEP_DURATION 10000    // tiempo de cada paso en milisegundos
+#define STEP_DURATION 8000    // tiempo de cada paso en milisegundos
 #define MAX_STEPS 6           // Cantidad de pasos maxima permitida
 #define MIN_STEPS 4           // Cantidad de pasos minima permitida
 
@@ -98,6 +102,11 @@ const int nextStepButton = 27;      //Boton para avanzar al siguiente paso
 const int startButton = 28;         //Boton para iniciar ejecucion de pasos
 const int encoderS1 = 29;           //PIN S1
 const int encoderS2 = 30;           //PIN S2
+
+DFRobotDFPlayerMini player;
+HardwareSerial &mp3 = Serial1;
+
+bool melodyPlaying = false;
 
 // Dimensiones y posiciones de la iconografia
 const int sizeIcon = 100;
@@ -232,17 +241,17 @@ void backward() {
 
 void turnLeft() {
   Serial.println("Girar izquierda");
-  startMove(-STEPS_PER_REV/2, STEPS_PER_REV/2);
+  startMove(-HALF_STEPS_PER_REV, HALF_STEPS_PER_REV);
 }
 
 void turnRight() {
   Serial.println("Girar derecha");
-  startMove(STEPS_PER_REV/2, -STEPS_PER_REV/2);
+  startMove(HALF_STEPS_PER_REV, -HALF_STEPS_PER_REV);
 }
 
 void spin360() {
   Serial.println("Giro 360");
-  startMove(STEPS_PER_REV, STEPS_PER_REV);
+  startMove(STEPS_PER_REV*2, STEPS_PER_REV*2);
 }
 
 /*-------------- ANIMACIONES -------------*/
@@ -562,26 +571,44 @@ void executeMelody(int option){
       break;
 
     case 1:
-      Serial.println("Cancion feliz");
+      Serial.println("Cancion abecedario");
       player.play(1);   // archivo 0001.mp3
       melodyPlaying = true;
       break;
 
     case 2:
-      Serial.println("Cancion relajante");
+      Serial.println("Cancion de navidad");
       player.play(2);   // archivo 0001.mp3
       melodyPlaying = true;
       break;
 
     case 3:
-      Serial.println("Cancion melancolica");
+      Serial.println("Cancion alegre");
       player.play(3);   // archivo 0001.mp3
       melodyPlaying = true;
       break;
 
     case 4:
-      Serial.println("Cancion animada");
+      Serial.println("Cancion de autobus");
       player.play(4);   // archivo 0001.mp3
+      melodyPlaying = true;
+      break;
+    
+    case 5:
+      Serial.println("Cancion de SC");
+      player.play(5);   // archivo 0001.mp3
+      melodyPlaying = true;
+      break;
+      
+    case 6:
+      Serial.println("Cancion de Clementine");
+      player.play(6);   // archivo 0001.mp3
+      melodyPlaying = true;
+      break;
+    
+    case 7:
+      Serial.println("Cancion de HB");
+      player.play(7);   // archivo 0001.mp3
       melodyPlaying = true;
       break;
   }
@@ -646,6 +673,7 @@ bool stepRunning = false;
 bool sequenceRunning = false;
 
 unsigned long stepStart = 0;
+unsigned long stepDuration = 0;
 
 int executingIndex = 0;
 int executingIteration = 0;
@@ -656,6 +684,22 @@ void executeStep(step s){
   executeLight(s.light);
   executeMelody(s.melody);
   executeAnimation(s.animation);
+}
+
+unsigned long getMovementDuration(uint8_t movement){
+
+  switch (movement){
+
+    case 0: return REVOLUTION_TIME_MS;
+
+    case 1: return REVOLUTION_TIME_MS;        // forward
+    case 2: return REVOLUTION_TIME_MS;        // backward
+    case 3: return HALF_REV_TIME_MS;   // turn
+    case 4: return HALF_REV_TIME_MS;
+    case 5: return REVOLUTION_TIME_MS;        // spin
+
+    default: return REVOLUTION_TIME_MS;
+  }
 }
 
 void startSequence(){
@@ -722,16 +766,19 @@ void updateSequence() {
     Serial.println(executingIteration);
 
     // Ejecutar el paso actual
-    updateIcons(sequence[executingIndex]);
+    step current = sequence[executingIndex];
+    updateIcons(current);
     updateBar(executingIndex);
-    executeStep(sequence[executingIndex]);
+
+    executeStep(current);    
+    stepDuration = getMovementDuration(current.movement);
 
     stepStart = millis();
     stepRunning = true;
   }
 
   // --- VER SI EL PASO TERMINÓ ---
-  if (stepRunning && millis() - stepStart >= STEP_DURATION) {
+  if (stepRunning && millis() - stepStart >= stepDuration) {
 
     stepRunning = false;
     executingIndex++;   // avanzar al siguiente paso
