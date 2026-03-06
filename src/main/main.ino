@@ -690,7 +690,7 @@ unsigned long getMovementDuration(uint8_t movement){
 
   switch (movement){
 
-    case 0: return REVOLUTION_TIME_MS;
+    case 0: return STEP_DURATION;
 
     case 1: return REVOLUTION_TIME_MS;        // forward
     case 2: return REVOLUTION_TIME_MS;        // backward
@@ -698,7 +698,7 @@ unsigned long getMovementDuration(uint8_t movement){
     case 4: return HALF_REV_TIME_MS;
     case 5: return REVOLUTION_TIME_MS;        // spin
 
-    default: return REVOLUTION_TIME_MS;
+    default: return STEP_DURATION;
   }
 }
 
