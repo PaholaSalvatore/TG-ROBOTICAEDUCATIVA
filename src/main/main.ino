@@ -26,8 +26,8 @@ bool melodyPlaying = false;
 
 #define MOVEMENTS 6   // Opciones de movimientos que puede ejecutar el robot
 #define LIGHTS 7      // Opciones de luces que puede ejecutar el robot
-#define MELODIES 6    // Opciones de melodias que puede reproducir el robot
-#define ANIMATIONS 6  // Opciones de animacion que puede hacer el robot
+#define MELODIES 7    // Opciones de melodias que puede reproducir el robot
+#define ANIMATIONS 7  // Opciones de animacion que puede hacer el robot
 
 #define MAX_ITERATIONS 4              // Iteraciones maximas ejecutables
 #define MIN_ITERATIONS 1              // Iteraciones minimas ejecutables
@@ -257,6 +257,17 @@ void turnDownLed() {
   }
 }
 
+//Ojos felices
+void happyEyes(int d) {
+  int puntos[][2] = {
+                {1,2},{1,3},{1,4},{1,5},
+          {2,1},                        {2,6},
+          {3,1},                        {3,6}                          
+  };
+
+  for (auto &p : puntos) face.setLed(d, p[0], p[1], true);
+}
+
 //Cara de mareado
 void dizzyEyes(int d) {
   for (int i = 0; i < 8; i++) {
@@ -295,13 +306,13 @@ void blinkedEye(int d) {
 //Ojos de enamorado (corazones)
 void heartEyes(int d) {
   int puntos[][2] = {
-    {0,1},{0,2},{0,5},{0,6},
+          {0,1},{0,2},            {0,5},{0,6},
     {1,0},{1,1},{1,2},{1,3},{1,4},{1,5},{1,6},{1,7},
     {2,0},{2,1},{2,2},{2,3},{2,4},{2,5},{2,6},{2,7},
     {3,0},{3,1},{3,2},{3,3},{3,4},{3,5},{3,6},{3,7},
-    {4,1},{4,2},{4,3},{4,4},{4,5},{4,6},
-    {5,2},{5,3},{5,4},{5,5},
-    {6,3},{6,4}
+          {4,1},{4,2},{4,3},{4,4},{4,5},{4,6},
+                {5,2},{5,3},{5,4},{5,5},
+                      {6,3},{6,4}
   };
   
   for (auto &p : puntos) face.setLed(d, p[0], p[1], true);
@@ -310,10 +321,10 @@ void heartEyes(int d) {
 //Ojitos tristes
 void leftSadEye(int d) {
   int puntos[][2] = {
-    {1,0},{1,7},
-    {2,0},{2,7},
-    {3,1},{3,6},
-    {4,2},{4,3},{4,4},{4,5},
+    {1,0},                                    {1,7},
+    {2,0},                                    {2,7},
+          {3,1},                        {3,6},
+                {4,2},{4,3},{4,4},{4,5},
     {6,0},{6,1},
     {7,0},{7,1}
   };
@@ -335,19 +346,35 @@ void rightSadEye(int d) {
 }
 
 //Ojitos enojados
-void angryEyes(int d) {
+void leftAngryEye(int d) {
   int puntos[][2] = {
-    {0,0},{0,1}, {0,2},{0,3},
+    {0,0},{0,1},{0,2},{0,3},
     {1,0},{1,1},{1,2},{1,3},{1,4},
     {2,0},{2,1},{2,2},{2,3},{2,4},{2,5},
     {3,0},{3,1},{3,2},{3,3},{3,4},{3,5},{3,6},
     {4,0},{4,1},{4,2},{4,3},{4,4},{4,5},{4,6},{4,7},
-    {5,0},{5,1},{5,2},{5,3},              {5,6},{5,7},
-    {6,0},{6,1},{6,2},{6,3},              {6,6},{6,7},
+    {5,0},{5,1},{5,2},{5,3},{5,4},            {5,7},
+    {6,0},{6,1},{6,2},{6,3},{6,4},            {6,7},
     {7,0},{7,1},{7,2},{7,3},{7,4},{7,5},{7,6},{7,7}
   };
   
   for (auto &p : puntos) face.setLed(d, p[0], p[1], true);
+}
+
+void rightAngryEye(int d){
+    int puntos[][2] = {
+                            {0,4},{0,5},{0,6},{0,7},
+                      {1,3},{1,4},{1,5},{1,6},{1,7},
+                {2,2},{2,3},{2,4},{2,5},{2,6},{2,7},
+          {3,1},{3,2},{3,3},{3,4},{3,5},{3,6},{3,7},
+    {4,0},{4,1},{4,2},{4,3},{4,4},{4,5},{4,6},{4,7},
+    {5,0},{5,1},{5,2},{5,3},{5,4},            {5,7},
+    {6,0},{6,1},{6,2},{6,3},{6,4},            {6,7},
+    {7,0},{7,1},{7,2},{7,3},{7,4},{7,5},{7,6},{7,7}
+  };
+  
+  for (auto &p : puntos) face.setLed(d, p[0], p[1], true);
+
 }
 
 /* ------ MEMORIA -------*/
@@ -569,15 +596,15 @@ void executeAnimation(int option){
       break;
 
     case 1:
-      Serial.println("Guiño de ojo");
-      openedEye(0);
-      blinkedEye(1);
+      Serial.println("Feliz");
+      happyEyes(0);
+      happyEyes(1);
       break;
 
     case 2:
-      Serial.println("Neutro");
-      dizzyEyes(0);
-      dizzyEyes(1);
+      Serial.println("Guiño de ojo");
+      openedEye(0);
+      blinkedEye(1);
       break;
 
     case 3:
@@ -588,20 +615,27 @@ void executeAnimation(int option){
 
     case 4:
       Serial.println("Enojado");
-      angryEyes(0);
-      angryEyes(1);
+      leftAngryEye(1);
+      rightAngryEye(0);
       break;
 
     case 5:
       Serial.println("Enamorado");
       heartEyes(0);
       heartEyes(1);
+    break;
 
     case 6:
       Serial.println("Curioso");
       openedEye(0);
       openedEye(1);
       break;
+
+    case 7:
+      Serial.println("Dizzy");
+      dizzyEyes(0);
+      dizzyEyes(1);
+    break;
   }
 
 }
@@ -685,7 +719,7 @@ void updateSequence() {
     Serial.print("Paso ");
     Serial.print(executingIndex);
     Serial.print(" | Iteracion ");
-    Serial.println(executingIteration + 1);
+    Serial.println(executingIteration);
 
     // Ejecutar el paso actual
     updateIcons(sequence[executingIndex]);
