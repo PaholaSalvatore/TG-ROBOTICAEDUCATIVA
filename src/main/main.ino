@@ -35,8 +35,8 @@
 
 #define MAX_ITERATIONS 4              // Iteraciones maximas ejecutables
 #define MIN_ITERATIONS 1              // Iteraciones minimas ejecutables
-#define ENCODER_STEPS_PER_CHANGE 3    // Regulacion de pulsos del encoder para seleccionar iteraciones
-#define ENCODER_STEPS_PER_REV 15
+#define ENCODER_STEPS_PER_CHANGE 2    // Regulacion de pulsos del encoder para seleccionar iteraciones
+#define ENCODER_STEPS_PER_REV 20
 
 // Colores RGB 
 #define RED    255, 0, 0
@@ -867,7 +867,7 @@ void resetProgram() {
   blinkActive = 0;
   blinkCount = 0;
 
-  actualizarLEDs();
+  updateLeds();
 
   Serial.println("Sistema reiniciado. Listo para nueva secuencia.");
 }
@@ -970,7 +970,7 @@ void handleStartButton() {
 }
 
 //Iteraciones por giro de perilla
-void readEncoder() {
+/*void readEncoder() {
  int s1 = digitalRead(encoderS1);
   int s2 = digitalRead(encoderS2);
   int position = 0;
@@ -1018,20 +1018,78 @@ void readEncoder() {
     Serial.print("Iteraciones: ");
     Serial.println(iterations);
     
-    actualizarLEDs();
+    updateLeds();
 
+  }
+
+  lastS1State = s1;
+}*/
+void readEncoder() {
+  int s1 = digitalRead(encoderS1);
+  int s2 = digitalRead(encoderS2);
+
+  if (s1 != lastS1State) {
+    if (s2 == s1) {
+      encoderStepCounter++;
+    } else {
+      encoderStepCounter--;
+    }
+
+    if (encoderStepCounter >= ENCODER_STEPS_PER_CHANGE) {
+      encoderPosition++;
+      encoderStepCounter = 0;
+    }
+    else if (encoderStepCounter <= -ENCODER_STEPS_PER_CHANGE) {
+      encoderPosition--;
+      encoderStepCounter = 0;
+    }
+
+    if (encoderPosition >= ENCODER_STEPS_PER_REV) encoderPosition = 0;
+    if (encoderPosition < 0) encoderPosition = ENCODER_STEPS_PER_REV - 1;
+
+    setIterationsFromPosition(encoderPosition);
   }
 
   lastS1State = s1;
 }
 
-void actualizarLEDs() {
+void updateLeds() {
   for (int i = 0; i < 4; i++) {
     if (i < iterations) {
       digitalWrite(ledPins[i], HIGH);
     } else {
       digitalWrite(ledPins[i], LOW);
     }
+  }
+}
+
+void setIterationsFromPosition(int pos) {
+  pos = (pos % ENCODER_STEPS_PER_REV + ENCODER_STEPS_PER_REV) % ENCODER_STEPS_PER_REV;
+
+  const uint8_t limits[] = {1, 4, 7, 9};  // posiciones de la perilla
+  const uint8_t values[] = {1, 2, 3, 4};  // valores posibles de las iteraciones
+
+  if (pos > limits[3]) return;   // mitad inferior: no cambia
+
+  int newIterations = iterations;
+
+  for (int i = 0; i < 4; i++) {
+    if (pos <= limits[i]) {
+      newIterations = values[i];
+      break;
+    }
+  }
+
+  newIterations = constrain(newIterations, MIN_ITERATIONS, MAX_ITERATIONS);
+
+  if (newIterations != iterations) {
+    iterations = newIterations;
+    updateLeds();
+
+    Serial.print("encoderPosition: ");
+    Serial.print(pos);
+    Serial.print(" | iterations: ");
+    Serial.println(iterations);
   }
 }
 
@@ -1191,7 +1249,8 @@ void setup() {
     pinMode(ledPins[i], OUTPUT);
   }
 
-  actualizarLEDs();
+  iterations = 1;
+  updateLeds();
 
   Serial.println("INICIO DEL PROGRAMA");
 }
