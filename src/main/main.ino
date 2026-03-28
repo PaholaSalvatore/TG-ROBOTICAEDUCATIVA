@@ -29,9 +29,9 @@
 #define MIN_STEPS 4           // Cantidad de pasos minima permitida
 
 #define MOVEMENTS 6   // Opciones de movimientos que puede ejecutar el robot
-#define LIGHTS 7      // Opciones de luces que puede ejecutar el robot
-#define MELODIES 7    // Opciones de melodias que puede reproducir el robot
-#define ANIMATIONS 7  // Opciones de animacion que puede hacer el robot
+#define LIGHTS 8      // Opciones de luces que puede ejecutar el robot
+#define MELODIES 9    // Opciones de melodias que puede reproducir el robot
+#define ANIMATIONS 9  // Opciones de animacion que puede hacer el robot
 
 #define MAX_ITERATIONS 4              // Iteraciones maximas ejecutables
 #define MIN_ITERATIONS 1              // Iteraciones minimas ejecutables
@@ -241,17 +241,17 @@ void backward() {
 
 void turnLeft() {
   Serial.println("Girar izquierda");
-  startMove(-HALF_STEPS_PER_REV, HALF_STEPS_PER_REV);
+  startMove(HALF_STEPS_PER_REV, -HALF_STEPS_PER_REV);
 }
 
 void turnRight() {
   Serial.println("Girar derecha");
-  startMove(HALF_STEPS_PER_REV, -HALF_STEPS_PER_REV);
+  startMove(-HALF_STEPS_PER_REV, HALF_STEPS_PER_REV);
 }
 
 void spin360() {
   Serial.println("Giro 360");
-  startMove(STEPS_PER_REV*2, STEPS_PER_REV*2);
+  startMove(STEPS_PER_REV*2, -STEPS_PER_REV*2);
 }
 
 /*-------------- ANIMACIONES -------------*/
@@ -515,6 +515,11 @@ void executeMovement(int option){
     case 5:
       spin360();
       break;
+
+    case 6:
+      Serial.println("Sin movimiento seleccionado");
+      stopMotors();
+      break;
   }
 }
 
@@ -559,6 +564,11 @@ void executeLight(int option){
       led.setRGB(ORANGE);
       Serial.println("NARANJA");
       break;
+    
+    case 8:
+      led.setRGB(OFF);
+      Serial.println("Sin opcion");
+      break;
   }
 }
 
@@ -571,45 +581,55 @@ void executeMelody(int option){
       break;
 
     case 1:
-      Serial.println("Cancion abecedario");
+      Serial.println("Cancion estrellita");
       player.play(1);   // archivo 0001.mp3
       melodyPlaying = true;
       break;
 
     case 2:
-      Serial.println("Cancion de navidad");
+      Serial.println("Cancion alegre");
       player.play(2);   // archivo 0001.mp3
       melodyPlaying = true;
       break;
 
     case 3:
-      Serial.println("Cancion alegre");
+      Serial.println("Cancion de autobus");
       player.play(3);   // archivo 0001.mp3
       melodyPlaying = true;
       break;
 
     case 4:
-      Serial.println("Cancion de autobus");
+      Serial.println("Cancion oh my darling clementine");
       player.play(4);   // archivo 0001.mp3
       melodyPlaying = true;
       break;
     
     case 5:
-      Serial.println("Cancion de SC");
+      Serial.println("Cancion happy birthday");
       player.play(5);   // archivo 0001.mp3
       melodyPlaying = true;
       break;
       
     case 6:
-      Serial.println("Cancion de Clementine");
+      Serial.println("Cancion de navidad");
       player.play(6);   // archivo 0001.mp3
       melodyPlaying = true;
       break;
     
     case 7:
-      Serial.println("Cancion de HB");
+      Serial.println("Cancion de SC");
       player.play(7);   // archivo 0001.mp3
       melodyPlaying = true;
+      break;
+
+    case 8:
+      Serial.println("Ladridos");
+      player.play(8);   // archivo 0001.mp3
+      melodyPlaying = true;
+      break;
+
+    case 9:
+      Serial.println("Sin cancion");
       break;
   }
 }
@@ -663,6 +683,11 @@ void executeAnimation(int option){
       dizzyEyes(0);
       dizzyEyes(1);
     break;
+
+    case 8:
+      Serial.println("Sin expresiones seleccionadas");
+      break;
+
   }
 
 }
@@ -712,7 +737,7 @@ void startSequence(){
     stepCount++;
   }
 
-  if(stepCount==0) return;
+  if(stepCount == 0) return;
 
   executingIndex = 0;
   executingIteration = 0;
@@ -1139,7 +1164,7 @@ void setup() {
   } else {
     Serial.println("DFPlayer no detectado, continuando sin audio");
   }
-  player.volume(30);  // Volumen de 0 a 30
+  player.volume(25);  // Volumen de 0 a 30
 
   //set botones
   pinMode(movementButton, INPUT_PULLUP);
@@ -1185,7 +1210,7 @@ void loop() {
 
     if (pressedButton(movementButton, btnMove)){
       movementCounter++;      
-      if (movementCounter > MOVEMENTS) movementCounter = 0;  
+      if (movementCounter > MOVEMENTS) movementCounter = 1;  
       currentStep.movement = movementCounter;
 
       updateMovementIcon(movementCounter);
@@ -1195,7 +1220,7 @@ void loop() {
 
     if (pressedButton(lightButton, btnLight)){
       lightCounter++; 
-      if (lightCounter > LIGHTS) lightCounter = 0;    
+      if (lightCounter > LIGHTS) lightCounter = 1;    
       currentStep.light = lightCounter;
 
       updateLightIcon(lightCounter);
@@ -1205,7 +1230,7 @@ void loop() {
 
     if (pressedButton(melodyButton, btnMelody)){
       melodyCounter++;
-      if (melodyCounter > MELODIES) melodyCounter = 0;    
+      if (melodyCounter > MELODIES) melodyCounter = 1;    
       currentStep.melody = melodyCounter;
 
       updateMelodyIcon(melodyCounter);
@@ -1215,7 +1240,7 @@ void loop() {
 
     if (pressedButton(animationButton, btnAnimation)){
       animationCounter++;
-      if (animationCounter > ANIMATIONS) animationCounter = 0;   
+      if (animationCounter > ANIMATIONS) animationCounter = 1;   
       currentStep.animation = animationCounter;
 
       updateAnimationIcon(animationCounter);
