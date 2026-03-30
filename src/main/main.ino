@@ -36,7 +36,7 @@
 #define MAX_ITERATIONS 4              // Iteraciones maximas ejecutables
 #define MIN_ITERATIONS 1              // Iteraciones minimas ejecutables
 #define ENCODER_STEPS_PER_CHANGE 2    // Regulacion de pulsos del encoder para seleccionar iteraciones
-#define ENCODER_STEPS_PER_REV 20
+#define ENCODER_STEPS_PER_REV 20      // Cantidad de pulsos por giro completo de la perilla
 
 // Colores RGB 
 #define RED    255, 0, 0
@@ -656,14 +656,14 @@ void executeAnimation(int option){
 
     case 3:
       Serial.println("Triste");
-      leftSadEye(1);
-      rightSadEye(0);
+      leftSadEye(0);
+      rightSadEye(1);
       break;
 
     case 4:
       Serial.println("Enojado");
-      leftAngryEye(1);
-      rightAngryEye(0);
+      leftAngryEye(0);
+      rightAngryEye(1);
       break;
 
     case 5:
@@ -1222,7 +1222,7 @@ void setup() {
   } else {
     Serial.println("DFPlayer no detectado, continuando sin audio");
   }
-  player.volume(25);  // Volumen de 0 a 30
+  player.volume(30);  // Volumen de 0 a 30
 
   //set botones
   pinMode(movementButton, INPUT_PULLUP);
