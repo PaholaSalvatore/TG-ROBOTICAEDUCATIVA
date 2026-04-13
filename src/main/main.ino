@@ -3,39 +3,74 @@
 #include <Stepper.h>
 #include <RGBLED.h>
 #include <DFRobotDFPlayerMini.h>
+#include <Adafruit_GFX.h>
+#include <MCUFRIEND_kbv.h>
+#include "SdFat.h"
 
-DFRobotDFPlayerMini player;
-HardwareSerial &mp3 = Serial1;
-
-bool melodyPlaying = false;
 /*============= CONFIGURACIONES GLOBALES ================*/
 
 #define STEPS_PER_REV 2048    // Pasos por vuelta
+#define HALF_STEPS_PER_REV STEPS_PER_REV/2
 #define MOTOR_SPEED 10        // Velocidad RPM
+
+#define SECONDS_PER_MINUTE 60UL
+#define MS_PER_SECOND 1000UL
+#define MS_PER_MINUTE (SECONDS_PER_MINUTE * MS_PER_SECOND)
+
+#define REVOLUTION_TIME_MS (MS_PER_MINUTE / MOTOR_SPEED)
+#define HALF_REV_TIME_MS (REVOLUTION_TIME_MS / 2)
 
 // Corrección física de la orientacion de los motores
 #define LEFT_MOTOR_INVERTED  1
 #define RIGHT_MOTOR_INVERTED -1
 
 #define STEP_DURATION 8000    // tiempo de cada paso en milisegundos
-#define MAX_STEPS 8           //Cantidad de pasos maxima permitida
+#define MAX_STEPS 6           // Cantidad de pasos maxima permitida
+#define MIN_STEPS 4           // Cantidad de pasos minima permitida
 
-#define MOVEMENTS 5   // Opciones de movimientos que puede ejecutar el robot
-#define LIGHTS 6      // Opciones de luces que puede ejecutar el robot
-#define MELODIES 6    // Opciones de melodias que puede reproducir el robot
-#define ANIMATIONS 6  // Opciones de animacion que puede hacer el robot
+#define MOVEMENTS 6   // Opciones de movimientos que puede ejecutar el robot
+#define LIGHTS 8      // Opciones de luces que puede ejecutar el robot
+#define MELODIES 9    // Opciones de melodias que puede reproducir el robot
+#define ANIMATIONS 9  // Opciones de animacion que puede hacer el robot
 
 #define MAX_ITERATIONS 4              // Iteraciones maximas ejecutables
 #define MIN_ITERATIONS 1              // Iteraciones minimas ejecutables
-#define ENCODER_STEPS_PER_CHANGE 3    // Regulacion de pulsos del encoder para seleccionar iteraciones
-#define ENCODER_STEPS_PER_REV 15
+#define ENCODER_STEPS_PER_CHANGE 2    // Regulacion de pulsos del encoder para seleccionar iteraciones
+#define ENCODER_STEPS_PER_REV 20      // Cantidad de pulsos por giro completo de la perilla
 
 // Colores RGB 
 #define RED    255, 0, 0
 #define GREEN   0, 255, 0
 #define BLUE    0, 0, 255
+#define YELLOW 255, 255, 0
+#define PINK 148, 0, 211
+#define PURPLE 255, 0, 255
+#define ORANGE 200, 140, 0
 #define WHITE  255, 255, 255
 #define OFF 0, 0, 0
+
+// Pines TFT
+const uint8_t SD_CS_PIN = 10;
+const uint8_t SOFT_MISO_PIN = 12;
+const uint8_t SOFT_MOSI_PIN = 11;
+const uint8_t SOFT_SCK_PIN  = 13;
+
+// Soft SPI
+SoftSpiDriver<SOFT_MISO_PIN, SOFT_MOSI_PIN, SOFT_SCK_PIN> softSpi;
+#define SD_CONFIG SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(0), &softSpi)
+
+MCUFRIEND_kbv tft;
+SdFat sd;
+File bmpFile;
+
+/* ============== ESTADOS BARRA DE PROGRESO UI ==========*/
+
+bool barTransitionActive = false;
+int barTransitionStep = 0;
+unsigned long barTransitionTime = 0;
+
+const int barTransitionFrames = 15;   // suavidad
+const int barTransitionInterval = 15; // velocidad ms
 
 /*============= DEFINICION DE COMPONENTES ===========*/
 
@@ -68,6 +103,21 @@ const int startButton = 28;         //Boton para iniciar ejecucion de pasos
 const int encoderS1 = 29;           //PIN S1
 const int encoderS2 = 30;           //PIN S2
 
+DFRobotDFPlayerMini player;
+HardwareSerial &mp3 = Serial1;
+
+bool melodyPlaying = false;
+
+// Dimensiones y posiciones de la iconografia
+const int sizeIcon = 100;
+const int sizeBarWidth = 220;
+const int sizeBarHeight = 50;
+const int leftX  = 10;
+const int rightX = 130;
+const int row1 = 20;
+const int row2 = ((2 * row1) + sizeIcon);
+const int row3 = 260;
+
 /*=========== VARIABLES DE CONTROL =============*/
 
 //Variables de control del encoder
@@ -76,6 +126,12 @@ int lastS1State = HIGH;
 int encoderStepCounter = 0;
 int encoderPosition = 0;
 const int ledPins[4] = {31, 33, 35, 37};
+
+bool blinkActive = false;
+int blinkLed = 0;
+int blinkCount = 0;
+
+unsigned long blinkTimer = 0;
 
 //Variables de estados relacionadas a los botones de accion
 int movementCounter = 0;
@@ -97,6 +153,15 @@ buttonState btnStart  = {HIGH, HIGH, 0};
 buttonState btnNextStep   = {HIGH, HIGH, 0};
 buttonState btnPreviousStep = {HIGH, HIGH, 0};
 
+/* ====== CAMBIOS DEL BOTON DE INICIO ======*/
+unsigned long startPressTime = 0;
+bool startWasPressed = false;
+
+const unsigned long LONG_PRESS_TIME = 1000; // 1 segundo
+bool sequencePaused = false;
+
+unsigned long pauseStartTime = 0;
+
 /*========== MODELO DE PASOS ==========*/
 
 // Modelo de datos para los pasos
@@ -106,6 +171,8 @@ struct step{
   uint8_t melody;
   uint8_t animation;
 };
+
+const int stepSelector = 47;
 
 step currentStep;             // paso actual
 step sequence[MAX_STEPS];     // Arreglo para la Secuencia de pasos
@@ -174,17 +241,17 @@ void backward() {
 
 void turnLeft() {
   Serial.println("Girar izquierda");
-  startMove(-STEPS_PER_REV/2, STEPS_PER_REV/2);
+  startMove(HALF_STEPS_PER_REV, -HALF_STEPS_PER_REV);
 }
 
 void turnRight() {
   Serial.println("Girar derecha");
-  startMove(STEPS_PER_REV/2, -STEPS_PER_REV/2);
+  startMove(-HALF_STEPS_PER_REV, HALF_STEPS_PER_REV);
 }
 
 void spin360() {
   Serial.println("Giro 360");
-  startMove(STEPS_PER_REV, STEPS_PER_REV);
+  startMove(STEPS_PER_REV*2, -STEPS_PER_REV*2);
 }
 
 /*-------------- ANIMACIONES -------------*/
@@ -199,6 +266,17 @@ void turnDownLed() {
   }
 }
 
+//Ojos felices
+void happyEyes(int d) {
+  int puntos[][2] = {
+                {1,2},{1,3},{1,4},{1,5},
+          {2,1},                        {2,6},
+          {3,1},                        {3,6}                          
+  };
+
+  for (auto &p : puntos) face.setLed(d, p[0], p[1], true);
+}
+
 //Cara de mareado
 void dizzyEyes(int d) {
   for (int i = 0; i < 8; i++) {
@@ -210,14 +288,14 @@ void dizzyEyes(int d) {
 //Ojo abierto
 void openedEye(int d) {
   int puntos[][2] = {
-    {0,2},{0,3},{0,4},{0,5},
-    {1,1},{1,2},{1,3},{1,4},{1,5},{1,6},
-    {2,1},{2,2},{2,3},{2,6},
-    {3,1},{3,2},{3,3},{3,6},
-    {4,1},{4,2},{4,3},{4,4},{4,5},{4,6},
-    {5,1},{5,2},{5,3},{5,4},{5,5},{5,6},
-    {6,1},{6,2},{6,3},{6,4},{6,5},{6,6},
-    {7,2},{7,3},{7,4},{7,5}
+                {0,2},{0,3},{0,4},{0,5},
+          {1,1},{1,2},{1,3},{1,4},{1,5},{1,6},
+          {2,1},{2,2},{2,3},            {2,6},
+          {3,1},{3,2},{3,3},            {3,6},
+          {4,1},{4,2},{4,3},{4,4},{4,5},{4,6},
+          {5,1},{5,2},{5,3},{5,4},{5,5},{5,6},
+          {6,1},{6,2},{6,3},{6,4},{6,5},{6,6},
+                {7,2},{7,3},{7,4},{7,5}
   };
   
   for (auto &p : puntos) face.setLed(d, p[0], p[1], true);
@@ -237,13 +315,13 @@ void blinkedEye(int d) {
 //Ojos de enamorado (corazones)
 void heartEyes(int d) {
   int puntos[][2] = {
-    {0,1},{0,2},{0,5},{0,6},
+          {0,1},{0,2},            {0,5},{0,6},
     {1,0},{1,1},{1,2},{1,3},{1,4},{1,5},{1,6},{1,7},
     {2,0},{2,1},{2,2},{2,3},{2,4},{2,5},{2,6},{2,7},
     {3,0},{3,1},{3,2},{3,3},{3,4},{3,5},{3,6},{3,7},
-    {4,1},{4,2},{4,3},{4,4},{4,5},{4,6},
-    {5,2},{5,3},{5,4},{5,5},
-    {6,3},{6,4}
+          {4,1},{4,2},{4,3},{4,4},{4,5},{4,6},
+                {5,2},{5,3},{5,4},{5,5},
+                      {6,3},{6,4}
   };
   
   for (auto &p : puntos) face.setLed(d, p[0], p[1], true);
@@ -252,10 +330,10 @@ void heartEyes(int d) {
 //Ojitos tristes
 void leftSadEye(int d) {
   int puntos[][2] = {
-    {1,0},{1,7},
-    {2,0},{2,7},
-    {3,1},{3,6},
-    {4,2},{4,3},{4,4},{4,5},
+    {1,0},                                    {1,7},
+    {2,0},                                    {2,7},
+          {3,1},                        {3,6},
+                {4,2},{4,3},{4,4},{4,5},
     {6,0},{6,1},
     {7,0},{7,1}
   };
@@ -277,20 +355,36 @@ void rightSadEye(int d) {
 }
 
 //Ojitos enojados
-void angryEyes(int d) {
+void leftAngryEye(int d) {
   int puntos[][2] = {
-    {0,1},{0,6},
-    {1,2},{1,5},
-    {2,3},{2,4},
-    {4,2},{4,3},{4,4},{4,5},
-    {5,2},{5,3},{5,5},
-    {6,2},{6,3},{6,4},{6,5},
-    {7,2},{7,3},{7,4},{7,5},
+    {0,0},{0,1},{0,2},{0,3},
+    {1,0},{1,1},{1,2},{1,3},{1,4},
+    {2,0},{2,1},{2,2},{2,3},{2,4},{2,5},
+    {3,0},{3,1},{3,2},{3,3},{3,4},{3,5},{3,6},
+    {4,0},{4,1},{4,2},{4,3},{4,4},{4,5},{4,6},{4,7},
+    {5,0},{5,1},{5,2},{5,3},{5,4},            {5,7},
+    {6,0},{6,1},{6,2},{6,3},{6,4},            {6,7},
+    {7,0},{7,1},{7,2},{7,3},{7,4},{7,5},{7,6},{7,7}
   };
   
   for (auto &p : puntos) face.setLed(d, p[0], p[1], true);
 }
 
+void rightAngryEye(int d){
+    int puntos[][2] = {
+                            {0,4},{0,5},{0,6},{0,7},
+                      {1,3},{1,4},{1,5},{1,6},{1,7},
+                {2,2},{2,3},{2,4},{2,5},{2,6},{2,7},
+          {3,1},{3,2},{3,3},{3,4},{3,5},{3,6},{3,7},
+    {4,0},{4,1},{4,2},{4,3},{4,4},{4,5},{4,6},{4,7},
+    {5,0},{5,1},{5,2},{5,3},{5,4},            {5,7},
+    {6,0},{6,1},{6,2},{6,3},{6,4},            {6,7},
+    {7,0},{7,1},{7,2},{7,3},{7,4},{7,5},{7,6},{7,7}
+  };
+  
+  for (auto &p : puntos) face.setLed(d, p[0], p[1], true);
+
+}
 
 /* ------ MEMORIA -------*/
 void saveCurrentStepAtIndex() {
@@ -333,26 +427,65 @@ void loadStep(int index) {
     Serial.println(currentStep.animation);
 }
 
-/*void printSequence() {
-  Serial.println("=== Contenido de la secuencia ===");
+void updateStepMode() {
 
-  for (int i = 0; i < stepCount; i++) {
-    Serial.print("Paso ");
-    Serial.print(i);
-    Serial.print(" -> ");
+  static int lastState = digitalRead(stepSelector);
 
-    Serial.print("M:");
-    Serial.print(sequence[i].movement);
-    Serial.print(" | L:");
-    Serial.print(sequence[i].light);
-    Serial.print(" | Me:");
-    Serial.print(sequence[i].melody);
-    Serial.print(" | A:");
-    Serial.println(sequence[i].animation);
+  int state = digitalRead(stepSelector);
+
+  if (state != lastState) {
+
+    delay(20);
+    state = digitalRead(stepSelector);
+
+    if (state != lastState) {
+
+      //Cambiar modo
+      if (state == LOW) {
+        maxConfiguredSteps = MIN_STEPS;   // 4
+      } else {
+        maxConfiguredSteps = MAX_STEPS;   // 6
+      }
+
+      Serial.print("Modo pasos: ");
+      Serial.println(maxConfiguredSteps);
+      Serial.println(digitalRead(stepSelector));
+
+      //AJUSTAR ÍNDICE
+      currentStepIndex = constrain(currentStepIndex, 0, maxConfiguredSteps - 1);
+
+      // AJUSTAR stepCount (MUY IMPORTANTE)
+      if (stepCount > maxConfiguredSteps) {
+        stepCount = maxConfiguredSteps;
+      }
+
+      //LIMPIAR PASOS EXTRA (de 6 → 4)
+      for (int i = maxConfiguredSteps; i < MAX_STEPS; i++) {
+        sequence[i] = {0,0,0,0};
+      }
+
+      //REDIBUJAR UI COMPLETA
+      updateIcons(currentStep);
+      startBarTransition();
+
+      lastState = state;
+    }
+  }
+}
+
+void initStepMode() {
+
+  int state = digitalRead(stepSelector);
+
+  if (state == LOW) {
+    maxConfiguredSteps = MIN_STEPS;   // 4
+  } else {
+    maxConfiguredSteps = MAX_STEPS;   // 6
   }
 
-  Serial.println("===============================");
-}*/
+  Serial.print("Modo inicial: ");
+  Serial.println(maxConfiguredSteps);
+}
 
 // Ejecuciones
 
@@ -382,6 +515,11 @@ void executeMovement(int option){
     case 5:
       spin360();
       break;
+
+    case 6:
+      Serial.println("Sin movimiento seleccionado");
+      stopMotors();
+      break;
   }
 }
 
@@ -408,8 +546,28 @@ void executeLight(int option){
       break;
 
     case 4:
-      led.setRGB(WHITE);
-      Serial.println("BLANCO");
+      led.setRGB(PINK);
+      Serial.println("ROSADO");
+      break;
+      
+    case 5:
+      led.setRGB(PURPLE);
+      Serial.println("MORADO");
+      break;
+
+    case 6:
+      led.setRGB(YELLOW);
+      Serial.println("AMARILLO");
+      break;
+
+    case 7:
+      led.setRGB(ORANGE);
+      Serial.println("NARANJA");
+      break;
+    
+    case 8:
+      led.setRGB(OFF);
+      Serial.println("Sin opcion");
       break;
   }
 }
@@ -423,27 +581,55 @@ void executeMelody(int option){
       break;
 
     case 1:
-      Serial.println("Cancion feliz");
+      Serial.println("Cancion estrellita");
       player.play(1);   // archivo 0001.mp3
       melodyPlaying = true;
       break;
 
     case 2:
-      Serial.println("Cancion relajante");
+      Serial.println("Cancion alegre");
       player.play(2);   // archivo 0001.mp3
       melodyPlaying = true;
       break;
 
     case 3:
-      Serial.println("Cancion melancolica");
+      Serial.println("Cancion de autobus");
       player.play(3);   // archivo 0001.mp3
       melodyPlaying = true;
       break;
 
     case 4:
-      Serial.println("Cancion animada");
+      Serial.println("Cancion oh my darling clementine");
       player.play(4);   // archivo 0001.mp3
       melodyPlaying = true;
+      break;
+    
+    case 5:
+      Serial.println("Cancion happy birthday");
+      player.play(5);   // archivo 0001.mp3
+      melodyPlaying = true;
+      break;
+      
+    case 6:
+      Serial.println("Cancion de navidad");
+      player.play(6);   // archivo 0001.mp3
+      melodyPlaying = true;
+      break;
+    
+    case 7:
+      Serial.println("Cancion de SC");
+      player.play(7);   // archivo 0001.mp3
+      melodyPlaying = true;
+      break;
+
+    case 8:
+      Serial.println("Ladridos");
+      player.play(8);   // archivo 0001.mp3
+      melodyPlaying = true;
+      break;
+
+    case 9:
+      Serial.println("Sin cancion");
       break;
   }
 }
@@ -457,9 +643,9 @@ void executeAnimation(int option){
       break;
 
     case 1:
-      Serial.println("Expresion Dizzy");
-      dizzyEyes(1);
-      dizzyEyes(0);
+      Serial.println("Feliz");
+      happyEyes(0);
+      happyEyes(1);
       break;
 
     case 2:
@@ -469,29 +655,41 @@ void executeAnimation(int option){
       break;
 
     case 3:
-      Serial.println("Expresion enamorado");
-      heartEyes(0);
-      heartEyes(1);
+      Serial.println("Triste");
+      leftSadEye(0);
+      rightSadEye(1);
       break;
 
     case 4:
-      Serial.println("Expresion triste");
-      leftSadEye(1);
-      rightSadEye(0);
+      Serial.println("Enojado");
+      leftAngryEye(0);
+      rightAngryEye(1);
       break;
 
     case 5:
-      Serial.println("Expresion Feliz");
+      Serial.println("Enamorado");
+      heartEyes(0);
+      heartEyes(1);
+    break;
+
+    case 6:
+      Serial.println("Curioso");
       openedEye(0);
       openedEye(1);
       break;
 
-    case 6:
-      Serial.println("Expresion molesta");
-      angryEyes(0);
-      angryEyes(1);
+    case 7:
+      Serial.println("Dizzy");
+      dizzyEyes(0);
+      dizzyEyes(1);
+    break;
+
+    case 8:
+      Serial.println("Sin expresiones seleccionadas");
       break;
+
   }
+
 }
 
 // ================= SEQUENCE SCHEDULER =================
@@ -500,6 +698,7 @@ bool stepRunning = false;
 bool sequenceRunning = false;
 
 unsigned long stepStart = 0;
+unsigned long stepDuration = 0;
 
 int executingIndex = 0;
 int executingIteration = 0;
@@ -512,13 +711,37 @@ void executeStep(step s){
   executeAnimation(s.animation);
 }
 
-void startSequence(){
+unsigned long getMovementDuration(uint8_t movement){
 
-  if(stepCount==0) return;
+  switch (movement){
+
+    case 0: return STEP_DURATION;
+
+    case 1: return REVOLUTION_TIME_MS;        // forward
+    case 2: return REVOLUTION_TIME_MS;        // backward
+    case 3: return HALF_REV_TIME_MS;          // turn
+    case 4: return HALF_REV_TIME_MS;
+    case 5: return REVOLUTION_TIME_MS;        // spin
+
+    default: return STEP_DURATION;
+  }
+}
+
+void startSequence(){
   if(sequenceRunning) return;
+
+  // GUARDAR SIEMPRE EL PASO ACTUAL
+  sequence[currentStepIndex] = currentStep;
+
+  if (currentStepIndex == stepCount && stepCount < maxConfiguredSteps) {
+    stepCount++;
+  }
+
+  if(stepCount == 0) return;
 
   executingIndex = 0;
   executingIteration = 0;
+  startBlink(0);
 
   stepRunning = false;   // ← IMPORTANTE
   stepStart = millis();  // ← sincroniza reloj
@@ -533,6 +756,8 @@ void updateSequence() {
   // Si no hay secuencia corriendo → no hacer nada
   if (!sequenceRunning) return;
 
+  //si esta pausado --> no avanza
+  if (sequencePaused) return;
 
   // --- INICIAR PASO NUEVO ---
   if (!stepRunning) {
@@ -541,6 +766,7 @@ void updateSequence() {
     if (executingIndex >= stepCount) {
 
       executingIteration++;
+      startBlink(executingIteration);
 
       // ¿Ya terminamos todas las iteraciones?
       if (executingIteration >= iterations) {
@@ -559,22 +785,25 @@ void updateSequence() {
       executingIndex = 0;
     }
 
-    // 👇 DEBUG DEL PASO
-
     Serial.print("Paso ");
     Serial.print(executingIndex);
     Serial.print(" | Iteracion ");
-    Serial.println(executingIteration + 1);
+    Serial.println(executingIteration);
 
     // Ejecutar el paso actual
-    executeStep(sequence[executingIndex]);
+    step current = sequence[executingIndex];
+    updateIcons(current);
+    updateBar(executingIndex);
+
+    executeStep(current);    
+    stepDuration = getMovementDuration(current.movement);
 
     stepStart = millis();
     stepRunning = true;
   }
 
   // --- VER SI EL PASO TERMINÓ ---
-  if (stepRunning && millis() - stepStart >= STEP_DURATION) {
+  if (stepRunning && millis() - stepStart >= stepDuration) {
 
     stepRunning = false;
     executingIndex++;   // avanzar al siguiente paso
@@ -583,19 +812,34 @@ void updateSequence() {
   }
 }
 
-/*void executeSequence() {
-  Serial.println("=== Ejecutando secuencia ===");
+void startBlink(int ledIndex){
 
-  for (int i = 0; i < stepCount; i++) {
-    Serial.print("Paso ");
-    Serial.println(i);
+  blinkActive = true;
+  blinkLed = ledIndex;
+  blinkCount = 0;
 
-    executeStep(sequence[i]);   // Acciones concurrentes
-    delay(STEP_DURATION);       // Mantener el paso activo
+  blinkTimer = millis();
+}
+
+void updateBlink(){
+
+  if(!blinkActive) return;
+
+  if(millis() - blinkTimer > 120){
+
+    blinkTimer = millis();
+
+    digitalWrite(ledPins[blinkLed], !digitalRead(ledPins[blinkLed]));
+
+    blinkCount++;
+
+    if(blinkCount >= 6){   // 3 parpadeos
+
+      digitalWrite(ledPins[blinkLed], HIGH);
+      blinkActive = false;
+    }
   }
-
-  Serial.println("=== Fin de la secuencia ===");
-}*/
+}
 
 /*========== REINICIO ===========*/
 
@@ -608,46 +852,41 @@ void resetProgram() {
   currentStep.melody = 0;
   currentStep.animation = 0;
 
+  for (int i=0 ; i < maxConfiguredSteps; i++){
+    sequence[i] = currentStep;
+  }
+
   movementCounter = 0;
   lightCounter = 0;
   melodyCounter = 0;
   animationCounter = 0;
 
-  resetHardwareState();
+  updateIcons(currentStep);
+  updateBar(currentStepIndex);
+
+  blinkActive = 0;
+  blinkCount = 0;
+
+  updateLeds();
 
   Serial.println("Sistema reiniciado. Listo para nueva secuencia.");
 }
 
 void resetHardwareState() {
   led.setRGB(OFF);      // apagar luces led RGB
-  executeMelody(0);     // detener sonido
+  player.stop();
+    melodyPlaying = false;
   stopMotors();         // detener motores
-  turnDownLed();       // apagar matrices
+  turnDownLed();        // apagar matrices
 
+  //Apagar leds de iteraciones
   for (int i = 0; i < 4; i++) {
     digitalWrite(ledPins[i], LOW);
   }
 
+  Serial.println("Hardware reiniciado");
+
 }
-
-
-/* --- Movimiento sincronizado base ---
-void syncMove(int leftSteps, int rightSteps) {
-
-  int steps = max(abs(leftSteps), abs(rightSteps));
-
-  int left = (leftSteps > 0) ? 1 : -1;
-  int right = (rightSteps > 0) ? 1 : -1;
-
-  for (int i = 0; i < steps; i++) {
-
-    if (i < abs(leftSteps))
-      motorLeft.step(left * LEFT_MOTOR_INVERTED);
-
-    if (i < abs(rightSteps))
-      motorRight.step(right * RIGHT_MOTOR_INVERTED);
-  }
-}*/
 
 //Lectura de los botones
 bool pressedButton(int pin, buttonState &btn) {
@@ -672,39 +911,66 @@ bool pressedButton(int pin, buttonState &btn) {
   return false;
 }
 
-/*void readEncoder() {
+void handleStartButton() {
 
-  static int lastEncoded = 0;
-  static long encoderValue = 0;
-  static int lastIterations = -1;   // 👈 para detectar cambios
+  bool read = digitalRead(startButton);
 
-  int MSB = digitalRead(encoderS1);
-  int LSB = digitalRead(encoderS2);
-
-  int encoded = (MSB << 1) | LSB;
-  int sum  = (lastEncoded << 2) | encoded;
-
-  if (sum == 0b1101 || sum == 0b0100 || sum == 0b0010 || sum == 0b1011)
-    encoderValue++;
-
-  if (sum == 0b1110 || sum == 0b0111 || sum == 0b0001 || sum == 0b1000)
-    encoderValue--;
-
-  lastEncoded = encoded;
-
-  iterations = constrain(abs(encoderValue)/4 + 1, 1, 4);
-
-  // 👇 imprimir solo cuando cambie
-  if(iterations != lastIterations){
-    Serial.print("Iteraciones seleccionadas: ");
-    Serial.println(iterations);
-    lastIterations = iterations;
+  // Detectar PRESIONADO
+  if (read == LOW && !startWasPressed) {
+    startWasPressed = true;
+    startPressTime = millis();
   }
-}*/
 
+  // Detectar SOLTADO
+  if (read == HIGH && startWasPressed) {
+
+    startWasPressed = false;
+
+    unsigned long pressDuration = millis() - startPressTime;
+
+    // --------- PULSACIÓN LARGA ----------
+    if (pressDuration > LONG_PRESS_TIME) {
+
+      Serial.println("RESET");
+
+      sequenceRunning = false;
+      sequencePaused = false;
+
+      resetProgram();
+      resetHardwareState();
+    }
+
+    // --------- PULSACIÓN CORTA ----------
+    else {
+
+      if (!sequenceRunning) {
+        Serial.println("START");
+        startSequence();
+      }
+      else if (sequenceRunning && !sequencePaused) {
+        Serial.println("PAUSA");
+        sequencePaused = true;
+        pauseStartTime = millis();  // GUARDAR MOMENTO DE PAUSA
+
+        if(melodyPlaying){
+          player.pause();
+        }
+      }
+      else if (sequencePaused) {
+        Serial.println("REANUDAR");
+        sequencePaused = false;
+        stepStart += millis() - pauseStartTime; // AJUSTAR EL TIEMPO DEL PASO
+
+        if(melodyPlaying){
+          player.start();
+        }
+      }
+    }
+  }
+}
 
 //Iteraciones por giro de perilla
-void readEncoder() {
+/*void readEncoder() {
  int s1 = digitalRead(encoderS1);
   int s2 = digitalRead(encoderS2);
   int position = 0;
@@ -752,14 +1018,42 @@ void readEncoder() {
     Serial.print("Iteraciones: ");
     Serial.println(iterations);
     
-    actualizarLEDs();
+    updateLeds();
 
+  }
+
+  lastS1State = s1;
+}*/
+void readEncoder() {
+  int s1 = digitalRead(encoderS1);
+  int s2 = digitalRead(encoderS2);
+
+  if (s1 != lastS1State) {
+    if (s2 == s1) {
+      encoderStepCounter++;
+    } else {
+      encoderStepCounter--;
+    }
+
+    if (encoderStepCounter >= ENCODER_STEPS_PER_CHANGE) {
+      encoderPosition++;
+      encoderStepCounter = 0;
+    }
+    else if (encoderStepCounter <= -ENCODER_STEPS_PER_CHANGE) {
+      encoderPosition--;
+      encoderStepCounter = 0;
+    }
+
+    if (encoderPosition >= ENCODER_STEPS_PER_REV) encoderPosition = 0;
+    if (encoderPosition < 0) encoderPosition = ENCODER_STEPS_PER_REV - 1;
+
+    setIterationsFromPosition(encoderPosition);
   }
 
   lastS1State = s1;
 }
 
-void actualizarLEDs() {
+void updateLeds() {
   for (int i = 0; i < 4; i++) {
     if (i < iterations) {
       digitalWrite(ledPins[i], HIGH);
@@ -769,17 +1063,166 @@ void actualizarLEDs() {
   }
 }
 
+void setIterationsFromPosition(int pos) {
+  pos = (pos % ENCODER_STEPS_PER_REV + ENCODER_STEPS_PER_REV) % ENCODER_STEPS_PER_REV;
+
+  const uint8_t limits[] = {1, 3, 5, 7};  // posiciones de la perilla
+  const uint8_t values[] = {1, 2, 3, 4};  // valores posibles de las iteraciones
+
+  if (pos > limits[3]) return;   // mitad inferior: no cambia
+
+  int newIterations = iterations;
+
+  for (int i = 0; i < 4; i++) {
+    if (pos <= limits[i]) {
+      newIterations = values[i];
+      break;
+    }
+  }
+
+  newIterations = constrain(newIterations, MIN_ITERATIONS, MAX_ITERATIONS);
+
+  if (newIterations != iterations) {
+    iterations = newIterations;
+    updateLeds();
+
+    Serial.print("encoderPosition: ");
+    Serial.print(pos);
+    Serial.print(" | iterations: ");
+    Serial.println(iterations);
+  }
+}
+
+// ================= MOSTRAR IMAGENES ===============
+void drawRAW(const char *filename, int x, int y, int w, int h) {
+
+    File file = sd.open(filename);
+
+    if (!file) {
+        Serial.println("No se pudo abrir RAW");
+        return;
+    }
+
+    uint16_t buffer[240];  
+
+    for (int row = 0; row < h; row++) {
+        // 🔥 POSICIÓN EXACTA EN EL ARCHIVO
+        file.seek(row * w * 2);
+
+        // leer fila exacta
+        file.read((uint8_t*)buffer, w * 2);
+
+        tft.setAddrWindow(x, y + row, x + w - 1, y + row);
+        tft.pushColors(buffer, w, true);
+    }
+
+    file.close();
+}
+
+void updateMovementIcon(int value) {
+  char filename[20];
+  sprintf(filename, "move%d.raw", value);
+  drawRAW(filename, leftX, row1, sizeIcon, sizeIcon);
+}
+
+void updateLightIcon(int value) {
+  char filename[20];
+  sprintf(filename, "color%d.raw", value);
+  drawRAW(filename, leftX, row2, sizeIcon, sizeIcon);
+}
+
+void updateMelodyIcon(int value) {
+  char filename[20];
+  sprintf(filename, "music%d.raw", value);
+  drawRAW(filename, rightX, row1, sizeIcon, sizeIcon);
+}
+
+void updateAnimationIcon(int value) {
+  char filename[20];
+  sprintf(filename, "eyes%d.raw", value);
+  drawRAW(filename, rightX, row2, sizeIcon, sizeIcon);
+}
+
+void updateIcons(step s) {
+  updateMovementIcon(s.movement);
+  updateLightIcon(s.light);
+  updateMelodyIcon(s.melody);
+  updateAnimationIcon(s.animation);
+}
+
+void updateBar(int stepIndex) {
+
+  char filename[20];
+  sprintf(filename, "bar%d_%d.raw", maxConfiguredSteps, stepIndex);
+
+  drawRAW(filename, leftX, row3, sizeBarWidth, sizeBarHeight);
+}
+
+void startBarTransition() {
+  barTransitionActive = true;
+  barTransitionStep = 0;
+  barTransitionTime = millis();
+}
+
+void updateBarTransition() {
+
+  // bloquear animación si el robot está ejecutando
+  if (sequenceRunning) return;
+
+  if (!barTransitionActive) return;
+
+  if (millis() - barTransitionTime < barTransitionInterval) return;
+
+  barTransitionTime = millis();
+
+  int wipeWidth = map(barTransitionStep, 0, barTransitionFrames, 0, sizeBarWidth);
+
+  tft.fillRect(leftX, row3, wipeWidth, sizeBarHeight, 0x0000);
+
+  barTransitionStep++;
+
+  if (barTransitionStep > barTransitionFrames) {
+
+    updateBar(currentStepIndex);
+    barTransitionActive = false;
+  }
+}
+
 /*============= SET UP ============*/
 
 void setup() {
   Serial.begin(9600);  
-  
+
+  pinMode(stepSelector, INPUT_PULLUP);
+  initStepMode();
+
+  uint16_t ID = tft.readID();
+  tft.begin(ID);
+  tft.setRotation(0);   // vertical
+  tft.fillScreen(0x0000);
+
+  Serial.println("Iniciando SD...");
+
+  if (!sd.begin(SD_CONFIG)) {
+    Serial.println("Error SD");
+    tft.setTextColor(0xF800);
+    tft.println("SD Error");
+    return;
+  }
+
+  Serial.println("SD OK");
+
+  //Mostrar imagenes derecha
+  updateIcons(sequence[currentStepIndex]);
+  updateBar(currentStepIndex);
+      
   mp3.begin(9600);    // DFPlayer en TX1/RX1
   if (player.begin(mp3)) {
     Serial.println("DFPlayer OK");
   } else {
     Serial.println("DFPlayer no detectado, continuando sin audio");
   }
+  player.volume(30);  // Volumen de 0 a 30
 
   //set botones
   pinMode(movementButton, INPUT_PULLUP);
@@ -806,7 +1249,8 @@ void setup() {
     pinMode(ledPins[i], OUTPUT);
   }
 
-  actualizarLEDs();
+  iterations = 1;
+  updateLeds();
 
   Serial.println("INICIO DEL PROGRAMA");
 }
@@ -815,85 +1259,100 @@ void setup() {
 /*================= LOOP ====================*/
 
 void loop() {
-  
-  /*================= BOTON MOVIMIENTO ==============*/
 
-  if (pressedButton(movementButton, btnMove)){
-    movementCounter++;      
-    if (movementCounter > MOVEMENTS) movementCounter = 0;  
-    currentStep.movement = movementCounter;
-  }
+  updateBarTransition();
 
-  /*============= BOTON LUCES =================*/
+  if (!sequenceRunning){  
+    updateStepMode();
 
-  if (pressedButton(lightButton, btnLight)){
-    lightCounter++; 
-    if (lightCounter > LIGHTS) lightCounter = 0;    
-    currentStep.light = lightCounter;
-  }
+    /*================= BOTON MOVIMIENTO ==============*/
 
-  /*================ BOTON MELODIAS ==============*/
+    if (pressedButton(movementButton, btnMove)){
+      movementCounter++;      
+      if (movementCounter > MOVEMENTS) movementCounter = 1;  
+      currentStep.movement = movementCounter;
 
-  if (pressedButton(melodyButton, btnMelody)){
-    melodyCounter++;
-    if (melodyCounter > MELODIES) melodyCounter = 0;    
-    currentStep.melody = melodyCounter;
-  }
+      updateMovementIcon(movementCounter);
+    }
 
-  /*============== BOTON ANIMACIONES =================*/
+    /*============= BOTON LUCES =================*/
 
-  if (pressedButton(animationButton, btnAnimation)){
-    animationCounter++;
-    if (animationCounter > ANIMATIONS) animationCounter = 0;   
-    currentStep.animation = animationCounter;
-  }
+    if (pressedButton(lightButton, btnLight)){
+      lightCounter++; 
+      if (lightCounter > LIGHTS) lightCounter = 1;    
+      currentStep.light = lightCounter;
 
-  /*========= SIGUIENTE PASO ========*/
+      updateLightIcon(lightCounter);
+    }
 
-  if (pressedButton(nextStepButton, btnNextStep)) {
+    /*================ BOTON MELODIAS ==============*/
 
-    saveCurrentStepAtIndex();
+    if (pressedButton(melodyButton, btnMelody)){
+      melodyCounter++;
+      if (melodyCounter > MELODIES) melodyCounter = 1;    
+      currentStep.melody = melodyCounter;
 
-    if (currentStepIndex < maxConfiguredSteps - 1) {
-      currentStepIndex++;
+      updateMelodyIcon(melodyCounter);
+    }
 
-      if (currentStepIndex < stepCount) {
-        loadStep(currentStepIndex);   // paso ya existente
-      } else {
-        // paso nuevo → limpio
-        currentStep = {0, 0, 0, 0};
-        movementCounter = lightCounter = melodyCounter = animationCounter = 0;
+    /*============== BOTON ANIMACIONES =================*/
+
+    if (pressedButton(animationButton, btnAnimation)){
+      animationCounter++;
+      if (animationCounter > ANIMATIONS) animationCounter = 1;   
+      currentStep.animation = animationCounter;
+
+      updateAnimationIcon(animationCounter);
+    }
+
+    /*========= SIGUIENTE PASO ========*/
+
+    if (pressedButton(nextStepButton, btnNextStep)) {
+
+      saveCurrentStepAtIndex();
+
+      if (currentStepIndex < maxConfiguredSteps - 1) {
+        currentStepIndex++;
+
+        if (currentStepIndex < stepCount) {
+          loadStep(currentStepIndex);   // paso ya existente
+          updateIcons(sequence[currentStepIndex]);
+          updateBar(currentStepIndex);
+        } else {
+          // paso nuevo → limpio
+          currentStep = {0, 0, 0, 0};
+          movementCounter = lightCounter = melodyCounter = animationCounter = 0;
+          updateIcons(sequence[currentStepIndex]);
+          updateBar(currentStepIndex);
+        }
       }
     }
-  }
 
-  /*============== PASO ANTERIOR ============*/
+    /*============== PASO ANTERIOR ============*/
 
-  if (pressedButton(previousStepButton, btnPreviousStep)) {
+    if (pressedButton(previousStepButton, btnPreviousStep)) {
 
-    saveCurrentStepAtIndex();
+      saveCurrentStepAtIndex();
 
-    if (currentStepIndex > 0) {
-      currentStepIndex--;
-      loadStep(currentStepIndex);
+      if (currentStepIndex > 0) {
+        currentStepIndex--;
+        loadStep(currentStepIndex);
+        updateIcons(sequence[currentStepIndex]);
+        updateBar(currentStepIndex);
+      }
     }
-  }
 
-  /*============= ITERACIONES ==========*/
-  if (!sequenceRunning){
+    /*============= ITERACIONES ==========*/
     readEncoder();   // siempre leer encoder
   }
 
   /*================ INICIO ==================*/
-  if (pressedButton(startButton, btnStart)) {
-    startSequence();
-  }
+  handleStartButton();
+  updateBlink();
 
   if (sequenceRunning){
     updateMotors();
     updateSequence();
     return;
   }
-
-
 }
