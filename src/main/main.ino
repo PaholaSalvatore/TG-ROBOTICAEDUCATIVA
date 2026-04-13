@@ -970,60 +970,6 @@ void handleStartButton() {
 }
 
 //Iteraciones por giro de perilla
-/*void readEncoder() {
- int s1 = digitalRead(encoderS1);
-  int s2 = digitalRead(encoderS2);
-  int position = 0;
-
-  if (s1 != lastS1State) {
-
-    // Detectar sentido
-    if (s2 == s1) {
-      encoderStepCounter++;   // horario
-    } else {
-      encoderStepCounter--;   // antihorario
-    }
-
-    // Solo cambiar valor cuando se acumulan suficientes pasos
-    if (encoderStepCounter >= ENCODER_STEPS_PER_CHANGE) {
-      encoderPosition++;
-      encoderStepCounter = 0;
-    }
-    else if (encoderStepCounter <= -ENCODER_STEPS_PER_CHANGE) {
-      encoderPosition--;
-      encoderStepCounter = 0;
-    }
-
-    // Normalizar vuelta
-    if (encoderPosition >= ENCODER_STEPS_PER_REV) 
-      encoderPosition = 0;
-    if (encoderPosition < 0) 
-      encoderPosition = ENCODER_STEPS_PER_REV - 1;
-
-  // Solo primera mitad (0–180°)
-    if (encoderPosition < ENCODER_STEPS_PER_REV / 2) {
-
-      // Dividir en zonas (cada 3 pasos aprox)
-      position = encoderPosition / ENCODER_STEPS_PER_CHANGE ;
-
-      if (position > ENCODER_STEPS_PER_CHANGE) 
-        position = ENCODER_STEPS_PER_CHANGE;
-
-      iterations = position + 1;
-    }
-    else {
-      // Segunda mitad → valor máximo
-      iterations = MAX_ITERATIONS;
-    }
-    Serial.print("Iteraciones: ");
-    Serial.println(iterations);
-    
-    updateLeds();
-
-  }
-
-  lastS1State = s1;
-}*/
 void readEncoder() {
   int s1 = digitalRead(encoderS1);
   int s2 = digitalRead(encoderS2);
