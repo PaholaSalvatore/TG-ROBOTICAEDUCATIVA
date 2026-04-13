@@ -719,7 +719,7 @@ unsigned long getMovementDuration(uint8_t movement){
 
     case 1: return REVOLUTION_TIME_MS;        // forward
     case 2: return REVOLUTION_TIME_MS;        // backward
-    case 3: return HALF_REV_TIME_MS;   // turn
+    case 3: return HALF_REV_TIME_MS;          // turn
     case 4: return HALF_REV_TIME_MS;
     case 5: return REVOLUTION_TIME_MS;        // spin
 
@@ -1066,7 +1066,7 @@ void updateLeds() {
 void setIterationsFromPosition(int pos) {
   pos = (pos % ENCODER_STEPS_PER_REV + ENCODER_STEPS_PER_REV) % ENCODER_STEPS_PER_REV;
 
-  const uint8_t limits[] = {1, 4, 7, 9};  // posiciones de la perilla
+  const uint8_t limits[] = {1, 3, 5, 7};  // posiciones de la perilla
   const uint8_t values[] = {1, 2, 3, 4};  // valores posibles de las iteraciones
 
   if (pos > limits[3]) return;   // mitad inferior: no cambia
